@@ -311,8 +311,14 @@ if __name__ == '__main__':
             ResBlock(64, 64, stride=2, downsample=conv1x1(64, 64, 2)),
         ]
 
+    train_loader, test_loader, count = get_data_loaders(batch_size=args.batch_size)
+    train_eval_loader = train_loader
+    data_gen = inf_generator(train_loader)
+    batches_per_epoch = len(train_loader)
+    num_of_classes = len(count)
+
     feature_layers = [ODEBlock(ODEfunc(64))] if is_odenet else [ResBlock(64, 64) for _ in range(6)]
-    fc_layers = [norm(64), nn.ReLU(inplace=True), nn.AdaptiveAvgPool2d((1, 1)), Flatten(), nn.Linear(64, 10)]
+    fc_layers = [norm(64), nn.ReLU(inplace=True), nn.AdaptiveAvgPool2d((1, 1)), Flatten(), nn.Linear(64, num_of_classes)]
 
     model = nn.Sequential(*downsampling_layers, *feature_layers, *fc_layers).to(device)
 
@@ -321,13 +327,8 @@ if __name__ == '__main__':
 
     criterion = nn.CrossEntropyLoss().to(device)
 
-    train_loader, test_loader, count = get_data_loaders(batch_size=args.batch_size)
-    train_eval_loader = train_loader
-    data_gen = inf_generator(train_loader)
-    batches_per_epoch = len(train_loader)
-
     lr_fn = learning_rate_with_decay(
-        args.batch_size, batch_denom=128, batches_per_epoch=batches_per_epoch, boundary_epochs=[60, 100, 140],
+        args.batch_size, batch_denom=args.batch_size, batches_per_epoch=batches_per_epoch, boundary_epochs=[60, 100, 140],
         decay_rates=[1, 0.1, 0.01, 0.001]
     )
 
