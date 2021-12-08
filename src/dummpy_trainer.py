@@ -55,13 +55,20 @@ def adjust_sleep_data_to_mnist(data, to_image_dim=20):
 
 
 def get_data_loaders(batch_size):
-    directory_path = f"../data/processed"
+    directory_path_train = f"../data/processed/train"
+    directory_path_test = f"../data/processed/test"
 
-    np_dataset = []
-    for np_name in glob.glob(directory_path + '/*.np[yz]'):
-        np_dataset.append(np_name)
+    np_dataset_train = []
+    for np_name in glob.glob(directory_path_train + '/*.np[yz]'):
+        np_dataset_train.append(np_name)
 
-    train_loader, test_loader, counts = dl.data_generator_np(np_dataset, np_dataset, batch_size)
+    np_dataset_test = []
+    for np_name in glob.glob(directory_path_test + '/*.np[yz]'):
+        np_dataset_test.append(np_name)
+
+    train_loader, test_loader, counts = dl.data_generator_np(training_files=np_dataset_train,
+                                                             subject_files=np_dataset_test,
+                                                             batch_size=batch_size)
 
     return train_loader, test_loader, counts
 

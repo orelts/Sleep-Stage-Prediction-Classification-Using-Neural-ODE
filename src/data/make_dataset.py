@@ -67,7 +67,7 @@ ann2label = {
 EPOCH_SEC_SIZE = 30
 
 
-def prepare_physionet(files, output_dir, select_ch="Fpz-Cz"):
+def prepare_physionet_files(files, output_dir, select_ch="Fpz-Cz"):
 
     for file in files:
         psg = file[0]
@@ -198,21 +198,29 @@ def prepare_physionet(files, output_dir, select_ch="Fpz-Cz"):
         print("\n=======================================\n")
 
 
+def prepare_physionet(files_train, files_test, output_train_dir, output_test_dir, select_ch="Fpz-Cz"):
+    prepare_physionet_files(files=files_train, output_dir=output_train_dir, select_ch=select_ch)
+    prepare_physionet_files(files=files_test, output_dir=output_test_dir, select_ch=select_ch)
+
 @click.command()
-@click.argument('output_filepath', type=click.Path())
+@click.argument('output_filepath_train', type=click.Path())
+@click.argument('output_filepath_test', type=click.Path())
 # TODO: load PSG and Hypnogram differently
-def main(output_filepath):
+def main(output_filepath_train, output_filepath_test):
     """ Runs data processing scripts to turn raw data from (../raw) into
         cleaned data ready to be analyzed (saved in ../processed).
     """
-    n_subjects = 2
-    logger = logging.getLogger(__name__)
-    logger.info(f'Fetching {n_subjects} subjects from physionet dataset ')
-    sleep_physionet.age.fetch_data(subjects=list(range(n_subjects)))
-    logger.info(f'Trying to read PSG data')
-    files = fetch_data(subjects=[0, 1], recording=[1])
+    train_subjects = list(range(10))
+    test_subjects = list(range(5))
+    test_subjects = [x+len(train_subjects) for x in test_subjects]
 
-    prepare_physionet(files=files, output_dir=output_filepath)
+    logger = logging.getLogger(__name__)
+    logger.info(f'Fetching train subjects {train_subjects}, test subjects {test_subjects} from physionet dataset ')
+
+    files_train = fetch_data(subjects=train_subjects, recording=[1])
+    files_test = fetch_data(subjects=test_subjects, recording=[1])
+
+    prepare_physionet(files_train=files_train, files_test=files_test, output_train_dir=output_filepath_train, output_test_dir=output_filepath_test)
 
 
 if __name__ == '__main__':
