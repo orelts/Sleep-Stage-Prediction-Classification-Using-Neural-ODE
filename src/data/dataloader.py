@@ -1,7 +1,8 @@
 import torch
 from torch.utils.data import Dataset
-import os
+from torch.utils.data.sampler import SubsetRandomSampler
 import numpy as np
+
 
 class LoadDataset_from_numpy(Dataset):
     # Initialize your data, download, etc.
@@ -9,16 +10,16 @@ class LoadDataset_from_numpy(Dataset):
         super(LoadDataset_from_numpy, self).__init__()
 
         # load files
-        X_train = np.load(np_dataset[0])["x"]
-        y_train = np.load(np_dataset[0])["y"]
+        X = np.load(np_dataset[0])["x"]
+        y = np.load(np_dataset[0])["y"]
 
         for np_file in np_dataset[1:]:
-            X_train = np.vstack((X_train, np.load(np_file)["x"]))
-            y_train = np.append(y_train, np.load(np_file)["y"])
+            X = np.vstack((X, np.load(np_file)["x"]))
+            y = np.append(y, np.load(np_file)["y"])
 
-        self.len = X_train.shape[0]
-        self.x_data = torch.from_numpy(X_train)
-        self.y_data = torch.from_numpy(y_train).long()
+        self.len = X.shape[0]
+        self.x_data = torch.from_numpy(X)
+        self.y_data = torch.from_numpy(y).long()
 
         # Correcting the shape of input to be (Batch_size, #channels, seq_len) where #channels=1
         if len(self.x_data.shape) == 3:
@@ -34,26 +35,47 @@ class LoadDataset_from_numpy(Dataset):
         return self.len
 
 
-def data_generator_np(training_files, subject_files, batch_size):
-    train_dataset = LoadDataset_from_numpy(training_files)
-    test_dataset = LoadDataset_from_numpy(subject_files)
+def data_generator_np(subject_files, batch_size, train_test_ratio=0.8):
 
-    # to calculate the ratio for the CAL
-    all_ys = np.concatenate((train_dataset.y_data, test_dataset.y_data))
-    all_ys = all_ys.tolist()
-    num_classes = len(np.unique(all_ys))
-    counts = [all_ys.count(i) for i in range(num_classes)]
+    shuffle_dataset = True
+    random_seed = 42
 
-    train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
+    # Loading numpy dataset
+    dataset = LoadDataset_from_numpy(subject_files)
+
+    # Creating data indices for training and test splits:
+    dataset_size = len(dataset)
+    indices = list(range(dataset_size))
+    split = int(np.floor((1 - train_test_ratio) * dataset_size))
+    if shuffle_dataset:
+        np.random.seed(random_seed)
+        np.random.shuffle(indices)
+
+    train_indices, test_indices = indices[split:], indices[:split]
+
+    # Creating PT data samplers and loaders:
+    train_sampler = SubsetRandomSampler(train_indices)
+    test_sampler = SubsetRandomSampler(test_indices)
+
+    train_loader = torch.utils.data.DataLoader(dataset=dataset,
                                                batch_size=batch_size,
-                                               shuffle=True,
+                                               sampler=train_sampler,
                                                drop_last=False,
                                                num_workers=0)
 
-    test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
+    test_loader = torch.utils.data.DataLoader(dataset=dataset,
                                               batch_size=batch_size,
-                                              shuffle=False,
+                                              sampler=test_sampler,
                                               drop_last=False,
                                               num_workers=0)
 
-    return train_loader, test_loader, counts
+    print(f"train_loader length in batches: {len(train_loader)}")
+    print(f"test_loader length in batches: {len(test_loader)}")
+
+    return train_loader, test_loader
+
+
+
+
+
+

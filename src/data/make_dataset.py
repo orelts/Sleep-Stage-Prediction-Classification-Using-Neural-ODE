@@ -203,25 +203,20 @@ def prepare_physionet(files_train, files_test, output_train_dir, output_test_dir
     prepare_physionet_files(files=files_test, output_dir=output_test_dir, select_ch=select_ch)
 
 @click.command()
-@click.argument('output_filepath_train', type=click.Path())
-@click.argument('output_filepath_test', type=click.Path())
+@click.argument('output_filepath', type=click.Path())
 # TODO: load PSG and Hypnogram differently
-def main(output_filepath_train, output_filepath_test):
+def main(output_filepath):
     """ Runs data processing scripts to turn raw data from (../raw) into
         cleaned data ready to be analyzed (saved in ../processed).
     """
-    train_subjects = list(range(10))
-    test_subjects = list(range(5))
-    test_subjects = [x+len(train_subjects) for x in test_subjects]
+    subjects = list(range(10))
 
     logger = logging.getLogger(__name__)
-    logger.info(f'Fetching train subjects {train_subjects}, test subjects {test_subjects} from physionet dataset ')
+    logger.info(f'Fetching  subjects {subjects} from physionet dataset ')
 
-    files_train = fetch_data(subjects=train_subjects, recording=[1])
-    files_test = fetch_data(subjects=test_subjects, recording=[1])
+    files = fetch_data(subjects=subjects, recording=[1])
 
-    prepare_physionet(files_train=files_train, files_test=files_test, output_train_dir=output_filepath_train, output_test_dir=output_filepath_test)
-
+    prepare_physionet_files(files=files, output_dir=output_filepath)
 
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'

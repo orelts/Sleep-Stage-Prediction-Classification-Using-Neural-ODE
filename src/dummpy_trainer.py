@@ -54,23 +54,21 @@ def adjust_sleep_data_to_mnist(data, to_image_dim=20):
     return data
 
 
-def get_data_loaders(batch_size):
-    directory_path_train = f"../data/processed/train"
-    directory_path_test = f"../data/processed/test"
+def get_data_loaders(batch_size, num_of_subjects=1):
+    directory_path = f"../data/processed/"
 
-    np_dataset_train = []
-    for np_name in glob.glob(directory_path_train + '/*.np[yz]'):
-        np_dataset_train.append(np_name)
+    np_dataset = []
+    for idx, np_name in enumerate(glob.glob(directory_path + '/*.np[yz]')):
+        if idx >= num_of_subjects:
+            logger.info(f"Loaded {num_of_subjects} subjects")
+            break
+        logger.info(f"loading {np_name}")
+        np_dataset.append(np_name)
 
-    np_dataset_test = []
-    for np_name in glob.glob(directory_path_test + '/*.np[yz]'):
-        np_dataset_test.append(np_name)
+    train_loader, test_loader = dl.data_generator_np(subject_files=np_dataset,
+                                                     batch_size=batch_size)
 
-    train_loader, test_loader, counts = dl.data_generator_np(training_files=np_dataset_train,
-                                                             subject_files=np_dataset_test,
-                                                             batch_size=batch_size)
-
-    return train_loader, test_loader, counts
+    return train_loader, test_loader
 
 
 def conv3x3(in_planes, out_planes, stride=1):
@@ -274,7 +272,8 @@ def get_logger(logpath, filepath, package_files=[], displaying=True, saving=True
         logger.addHandler(console_handler)
     logger.info(filepath)
     with open(filepath, "r") as f:
-        logger.info(f.read())
+        pass
+        # logger.info(f.read())
 
     for f in package_files:
         logger.info(f)
@@ -288,7 +287,7 @@ if __name__ == '__main__':
 
     makedirs(args.save)
     logger = get_logger(logpath=os.path.join(args.save, 'logs'), filepath=os.path.abspath(__file__))
-    logger.info(args)
+    # logger.info(args)
 
     device = torch.device('cuda:' + str(args.gpu) if torch.cuda.is_available() else 'cpu')
 
@@ -311,11 +310,11 @@ if __name__ == '__main__':
             ResBlock(64, 64, stride=2, downsample=conv1x1(64, 64, 2)),
         ]
 
-    train_loader, test_loader, count = get_data_loaders(batch_size=args.batch_size)
+    train_loader, test_loader = get_data_loaders(batch_size=args.batch_size)
     train_eval_loader = train_loader
     data_gen = inf_generator(train_loader)
     batches_per_epoch = len(train_loader)
-    num_of_classes = len(count)
+    num_of_classes = 5
 
     feature_layers = [ODEBlock(ODEfunc(64))] if is_odenet else [ResBlock(64, 64) for _ in range(6)]
     fc_layers = [norm(64), nn.ReLU(inplace=True), nn.AdaptiveAvgPool2d((1, 1)), Flatten(), nn.Linear(64, num_of_classes)]
