@@ -7,9 +7,6 @@ import glob
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
-import torchvision.datasets as datasets
-import torchvision.transforms as transforms
 
 import src.data.dataloader as dl
 
@@ -18,11 +15,10 @@ parser.add_argument('--network', type=str, choices=['resnet', 'odenet'], default
 parser.add_argument('--tol', type=float, default=1e-3)
 parser.add_argument('--adjoint', type=eval, default=False, choices=[True, False])
 parser.add_argument('--downsampling-method', type=str, default='conv', choices=['conv', 'res'])
-parser.add_argument('--nepochs', type=int, default=160)
+parser.add_argument('--nepochs', type=int, default=3000)
 parser.add_argument('--data_aug', type=eval, default=True, choices=[True, False])
 parser.add_argument('--lr', type=float, default=0.1)
-parser.add_argument('--batch_size', type=int, default=32)
-parser.add_argument('--test_batch_size', type=int, default=32)
+parser.add_argument('--batch_size', type=int, default=64)
 
 parser.add_argument('--save', type=str, default='./experiment1')
 parser.add_argument('--debug', action='store_true')
@@ -233,17 +229,19 @@ def one_hot(x, K):
     return np.array(x[:, None] == np.arange(K)[None, :], dtype=int)
 
 
-def accuracy(model, dataset_loader):
+def accuracy(model, dataset_loader, nof_classes=5):
     total_correct = 0
+    total = 0
     for x, y in dataset_loader:
         x = adjust_sleep_data_to_mnist(data=x)
         x = x.to(device)
-        y = one_hot(np.array(y.numpy()), 10)
+        y = one_hot(np.array(y.numpy()), nof_classes)
 
         target_class = np.argmax(y, axis=1)
         predicted_class = np.argmax(model(x).cpu().detach().numpy(), axis=1)
         total_correct += np.sum(predicted_class == target_class)
-    return total_correct / len(dataset_loader.dataset)
+        total += len(y)
+    return total_correct / total
 
 
 def count_parameters(model):
@@ -290,6 +288,7 @@ if __name__ == '__main__':
     # logger.info(args)
 
     device = torch.device('cuda:' + str(args.gpu) if torch.cuda.is_available() else 'cpu')
+    logger.info(f"deivce: {device}, {torch.cuda.get_device_name(0)}")
 
     is_odenet = args.network == 'odenet'
 
@@ -311,7 +310,6 @@ if __name__ == '__main__':
         ]
 
     train_loader, test_loader = get_data_loaders(batch_size=args.batch_size)
-    train_eval_loader = train_loader
     data_gen = inf_generator(train_loader)
     batches_per_epoch = len(train_loader)
     num_of_classes = 5
@@ -326,12 +324,9 @@ if __name__ == '__main__':
 
     criterion = nn.CrossEntropyLoss().to(device)
 
-    lr_fn = learning_rate_with_decay(
-        args.batch_size, batch_denom=args.batch_size, batches_per_epoch=batches_per_epoch, boundary_epochs=[60, 100, 140],
-        decay_rates=[1, 0.1, 0.01, 0.001]
-    )
-
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
+    optimizer = torch.optim.Adam([
+        {'params': model.parameters()}
+    ], weight_decay=0.1, lr=0.0001)
 
     best_acc = 0
     batch_time_meter = RunningAverageMeter()
@@ -340,9 +335,6 @@ if __name__ == '__main__':
     end = time.time()
 
     for itr in range(args.nepochs * batches_per_epoch):
-
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = lr_fn(itr)
 
         optimizer.zero_grad()
         x, y = data_gen.__next__()
@@ -371,7 +363,7 @@ if __name__ == '__main__':
 
         if itr % batches_per_epoch == 0:
             with torch.no_grad():
-                train_acc = accuracy(model, train_eval_loader)
+                train_acc = accuracy(model, train_loader)
                 val_acc = accuracy(model, test_loader)
                 if val_acc > best_acc:
                     torch.save({'state_dict': model.state_dict(), 'args': args}, os.path.join(args.save, 'model.pth'))

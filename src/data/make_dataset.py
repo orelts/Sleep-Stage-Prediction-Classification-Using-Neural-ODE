@@ -7,9 +7,7 @@ from dotenv import find_dotenv, load_dotenv
 from mne.datasets.sleep_physionet.age import fetch_data
 from mne.datasets import sleep_physionet
 import mne
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from datetime import datetime
 import math
 import ntpath
@@ -67,13 +65,30 @@ ann2label = {
 EPOCH_SEC_SIZE = 30
 
 
+def preprocess(raw_edf):
+    # Low Pass
+    high_cut_off_hz = 30.
+
+    # raw_edf.plot_psd(area_mode='range', tmax=10.0, average=False)
+    raw_edf.filter(None, high_cut_off_hz, fir_design='firwin')
+    # raw_edf.plot_psd(area_mode='range', tmax=10.0, average=False)
+
+    return raw_edf
+
+
 def prepare_physionet_files(files, output_dir, select_ch="Fpz-Cz"):
+    do_preprocess = False
 
     for file in files:
         psg = file[0]
         anno = file[1]
 
         raw = mne.io.read_raw_edf(psg, preload=True, stim_channel=None)
+
+        # Preprocessing
+        if do_preprocess:
+            raw = preprocess(raw)
+
         sampling_rate = raw.info['sfreq']
         print(raw.info)
         raw_ch_df = raw.to_data_frame(scalings=100.0)[select_ch]
@@ -217,6 +232,7 @@ def main(output_filepath):
     files = fetch_data(subjects=subjects, recording=[1])
 
     prepare_physionet_files(files=files, output_dir=output_filepath)
+
 
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
