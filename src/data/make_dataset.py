@@ -1,19 +1,31 @@
 # -*- coding: utf-8 -*-
 
-import click
 import logging
 from pathlib import Path
 from dotenv import find_dotenv, load_dotenv
 
 from mne.datasets.sleep_physionet.age import fetch_data
-from mne.datasets import sleep_physionet
 import mne
 import numpy as np
 from datetime import datetime
 import math
 import ntpath
 import os
-import dhedfreader
+import argparse
+import src.utils as utils
+from src.data import dhedfreader
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--pre_processing', action='store_true', default=False)
+parser.add_argument('--nrof_subjects', type=int, default=3)
+parser.add_argument('--select_ch', nargs='*', default=['EEG Fpz-Cz', 'EEG Pz-Oz'])
+parser.add_argument('--output_filepath', type=str, default=r'../../data/processed/')
+parser.add_argument('--subjects_to_folders',  default=True, choices=[True, False])
+parser.add_argument('--verbose', type=int, default=logging.INFO)
+
+args = parser.parse_args()
+
 
 # Data source and documentation https://physionet.org/content/sleep-edfx/1.0.0/
 """
@@ -66,6 +78,11 @@ ann2label = {
 EPOCH_SEC_SIZE = 30
 
 
+def makedirs(dirname):
+    if not os.path.exists(dirname):
+        os.makedirs(dirname)
+
+
 def preprocess(raw_edf):
     # Low Pass
     high_cut_off_hz = 30.
@@ -77,23 +94,25 @@ def preprocess(raw_edf):
     return raw_edf
 
 
-def prepare_physionet_files(files, output_dir, select_ch="Fpz-Cz"):
-    do_preprocess = False
-
+def prepare_physionet_files(files, output_dir, select_ch):
+    logger = logging.getLogger(__name__)
+    file_dir = 0
     for file in files:
+        file_dir = file_dir + 1
         psg = file[0]
         anno = file[1]
-
+        filename = ntpath.basename(psg).replace("-PSG.edf", ".npz")
+        logger.info(f"Preparing Subject {file}")
         raw = mne.io.read_raw_edf(psg, preload=True, stim_channel=None)
 
         # Preprocessing
-        if do_preprocess:
+        if args.pre_processing:
             raw = preprocess(raw)
 
         sampling_rate = raw.info['sfreq']
-        print(raw.info)
+        logger.debug(raw.info)
         raw_ch_df = raw.to_data_frame(scalings=100.0)[select_ch]
-        raw_ch_df = raw_ch_df.to_frame()
+        logger.debug(raw_ch_df.head())
         raw_ch_df.set_index(np.arange(len(raw_ch_df)))
 
         # Get raw header
@@ -133,34 +152,34 @@ def prepare_physionet_files(files, output_dir, select_ch="Fpz-Cz"):
                 idx = int(onset_sec * sampling_rate) + np.arange(duration_sec * sampling_rate, dtype=np.int)
                 label_idx.append(idx)
 
-                print("Include onset:{}, duration:{}, label:{} ({})".format(
+                logger.debug("Include onset:{}, duration:{}, label:{} ({})".format(
                     onset_sec, duration_sec, label, ann_str
                 ))
             else:
                 idx = int(onset_sec * sampling_rate) + np.arange(duration_sec * sampling_rate, dtype=np.int)
                 remove_idx.append(idx)
 
-                print("Remove onset:{}, duration:{}, label:{} ({})".format(
+                logger.debug("Remove onset:{}, duration:{}, label:{} ({})".format(
                     onset_sec, duration_sec, label, ann_str))
         labels = np.hstack(labels)
 
-        print("before remove unwanted: {}".format(np.arange(len(raw_ch_df)).shape))
+        logger.debug("before remove unwanted: {}".format(np.arange(len(raw_ch_df)).shape))
         if len(remove_idx) > 0:
             remove_idx = np.hstack(remove_idx)
             select_idx = np.setdiff1d(np.arange(len(raw_ch_df)), remove_idx)
         else:
             select_idx = np.arange(len(raw_ch_df))
-        print("after remove unwanted: {}".format(select_idx.shape))
+        logger.debug("after remove unwanted: {}".format(select_idx.shape))
 
         # Select only the data with labels
-        print("before intersect label: {}".format(select_idx.shape))
+        logger.debug("before intersect label: {}".format(select_idx.shape))
         label_idx = np.hstack(label_idx)
         select_idx = np.intersect1d(select_idx, label_idx)
-        print("after intersect label: {}".format(select_idx.shape))
+        logger.debug("after intersect label: {}".format(select_idx.shape))
 
         # Remove extra index
         if len(label_idx) > len(select_idx):
-            print("before remove extra labels: {}, {}".format(select_idx.shape, labels.shape))
+            logger.debug("before remove extra labels: {}, {}".format(select_idx.shape, labels.shape))
             extra_idx = np.setdiff1d(label_idx, select_idx)
             # Trim the tail
             if np.all(extra_idx > select_idx[-1]):
@@ -170,7 +189,7 @@ def prepare_physionet_files(files, output_dir, select_ch="Fpz-Cz"):
                 if n_label_trims != 0:
                     # select_idx = select_idx[:-n_trims]
                     labels = labels[:-n_label_trims]
-            print("after remove extra labels: {}, {}".format(select_idx.shape, labels.shape))
+            logger.debug("after remove extra labels: {}, {}".format(select_idx.shape, labels.shape))
 
         # Remove movement and unknown stages if any
         raw_ch = raw_ch_df.values[select_idx]
@@ -194,13 +213,13 @@ def prepare_physionet_files(files, output_dir, select_ch="Fpz-Cz"):
         if start_idx < 0: start_idx = 0
         if end_idx >= len(y): end_idx = len(y) - 1
         select_idx = np.arange(start_idx, end_idx + 1)
-        print("Data before selection: {}, {}".format(x.shape, y.shape))
+        logger.debug("Data before selection: {}, {}".format(x.shape, y.shape))
         x = x[select_idx]
         y = y[select_idx]
-        print("Data after selection: {}, {}".format(x.shape, y.shape))
+        logger.debug("Data after selection: {}, {}".format(x.shape, y.shape))
 
         # Save
-        filename = ntpath.basename(psg).replace("-PSG.edf", ".npz")
+
         save_dict = {
             "x": x,
             "y": y,
@@ -209,35 +228,45 @@ def prepare_physionet_files(files, output_dir, select_ch="Fpz-Cz"):
             "header_raw": h_raw,
             "header_annotation": h_ann,
         }
-        np.savez(os.path.join(output_dir, filename), **save_dict)
-
-        print("\n=======================================\n")
+        logger.info(f"Final Data Shape {x.shape}")
+        logger.info(f"Final Data ch_label {select_ch}")
+        if args.subjects_to_folders:
+            makedirs(output_dir + f"{file_dir}")
+            logger.info(f"Saving data into  {output_dir}{file_dir}")
+            print("\n\n")
+            np.savez(os.path.join(output_dir + f"{file_dir}", filename), **save_dict)
 
 
 def prepare_physionet(files_train, files_test, output_train_dir, output_test_dir, select_ch="Fpz-Cz"):
     prepare_physionet_files(files=files_train, output_dir=output_train_dir, select_ch=select_ch)
     prepare_physionet_files(files=files_test, output_dir=output_test_dir, select_ch=select_ch)
 
-@click.command()
-@click.argument('output_filepath', type=click.Path())
-# TODO: load PSG and Hypnogram differently
+
 def main(output_filepath):
     """ Runs data processing scripts to turn raw data from (../raw) into
         cleaned data ready to be analyzed (saved in ../processed).
     """
-    subjects = list(range(10))
+    # Logger config
 
     logger = logging.getLogger(__name__)
+    logger.setLevel(args.verbose)
+    # create console handler with a higher log level
+    ch = logging.StreamHandler()
+    ch.setLevel(args.verbose)
+    ch.setFormatter(utils.CustomFormatter())
+    logger.addHandler(ch)
+
+    subjects = list(range(args.nrof_subjects))
     logger.info(f'Fetching  subjects {subjects} from physionet dataset ')
 
     files = fetch_data(subjects=subjects, recording=[1])
+    logger.info(f'OUTPUT_DIR:{output_filepath}')
 
-    prepare_physionet_files(files=files, output_dir=output_filepath)
+    prepare_physionet_files(files=files, output_dir=output_filepath, select_ch=args.select_ch)
 
 
 if __name__ == '__main__':
-    log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    logging.basicConfig(level=logging.INFO, format=log_fmt)
+    makedirs(args.output_filepath)
 
     # not used in this stub but often useful for finding various files
     project_dir = Path(__file__).resolve().parents[2]
@@ -246,4 +275,4 @@ if __name__ == '__main__':
     # load up the .env entries as environment variables
     load_dotenv(find_dotenv())
 
-    main()
+    main(args.output_filepath)
