@@ -317,6 +317,7 @@ if __name__ == '__main__':
 
     if args.downsampling_method == 'conv':
         downsampling_layers = [
+            nn.Conv2d(10, 64, 3, 1),  # changed to 10 channels because 2 channels are devided to 5 bands each
             norm(64),
             nn.ReLU(inplace=True),
             nn.Conv2d(64, 64, 4, 2, 1),
@@ -401,7 +402,7 @@ if __name__ == '__main__':
                 )
     logger.info(f"Best Accuracy acheived for test {best_acc}")
     # Plotting accuracy vs epochs and saving figure
-    epochs = range(len(test_acc_lst))
+    epochs = len(test_acc_lst)
     plt.plot(epochs, train_acc_lst, 'g', label='Training accuracy')
     plt.plot(epochs, test_acc_lst, 'b', label='Test accuracy')
     plt.title('Training and Test Accuracy')
