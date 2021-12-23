@@ -14,12 +14,14 @@ import os
 import argparse
 import src.utils as utils
 from src.data import dhedfreader
+from src.features.build_features import break_2_bands
+
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--pre_processing', action='store_true', default=False)
+parser.add_argument('--pre_processing', action='store_true', default=True)
 parser.add_argument('--nrof_subjects', type=int, default=3)
-parser.add_argument('--select_ch', nargs='*', default=['EEG Fpz-Cz', 'EEG Pz-Oz'])
+parser.add_argument('--select_ch', nargs='*', default=['Fpz-Cz', 'Pz-Oz'])
 parser.add_argument('--output_filepath', type=str, default=r'../../data/processed/')
 parser.add_argument('--subjects_to_folders',  default=True, choices=[True, False])
 parser.add_argument('--verbose', type=int, default=logging.INFO)
@@ -105,13 +107,12 @@ def prepare_physionet_files(files, output_dir, select_ch):
         logger.info(f"Preparing Subject {file}")
         raw = mne.io.read_raw_edf(psg, preload=True, stim_channel=None)
 
-        # Preprocessing
-        if args.pre_processing:
-            raw = preprocess(raw)
-
         sampling_rate = raw.info['sfreq']
         logger.debug(raw.info)
         raw_ch_df = raw.to_data_frame(scalings=100.0)[select_ch]
+        # Preprocessing
+        if args.pre_processing:
+            raw_ch_df = break_2_bands(raw_ch_df)
         logger.debug(raw_ch_df.head())
         raw_ch_df.set_index(np.arange(len(raw_ch_df)))
 

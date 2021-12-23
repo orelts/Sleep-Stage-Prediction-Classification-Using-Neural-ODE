@@ -47,7 +47,7 @@ def adjust_sleep_data_to_mnist(data, to_image_dim=20):
     if data.shape[1] > 1:
         data = data.unsqueeze(2)
     else:
-        data = data.unsquuze(1)
+        data = data.unsqueeze(1)
     # reshaping to fit conv layers kernel size
     last_dime_size = data.shape[2] * data.shape[3]
 
@@ -317,7 +317,7 @@ if __name__ == '__main__':
 
     if args.downsampling_method == 'conv':
         downsampling_layers = [
-            nn.Conv2d(2, 64, 3, 1),
+            nn.Conv2d(10, 64, 3, 1),  # changed to 10 channels because 2 channels are devided to 5 bands each
             norm(64),
             nn.ReLU(inplace=True),
             nn.Conv2d(64, 64, 4, 2, 1),
@@ -410,4 +410,3 @@ if __name__ == '__main__':
     plt.ylabel('Accuracy')
     plt.legend()
     plt.savefig(path_to_save_log)
-
