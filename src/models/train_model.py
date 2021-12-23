@@ -317,7 +317,6 @@ if __name__ == '__main__':
 
     if args.downsampling_method == 'conv':
         downsampling_layers = [
-            nn.Conv2d(10, 64, 3, 1),  # changed to 10 channels because 2 channels are devided to 5 bands each
             norm(64),
             nn.ReLU(inplace=True),
             nn.Conv2d(64, 64, 4, 2, 1),
