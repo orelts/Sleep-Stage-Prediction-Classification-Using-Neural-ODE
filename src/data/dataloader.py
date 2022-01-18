@@ -2,6 +2,23 @@ import torch
 from torch.utils.data import Dataset
 from torch.utils.data.sampler import SubsetRandomSampler
 import numpy as np
+import glob
+
+
+def get_data_loaders(batch_size, directory_path, num_of_subjects=1):
+    print(directory_path)
+    np_dataset = []
+    for idx, np_name in enumerate(glob.glob(directory_path + '/*.np[yz]')):
+        if idx >= num_of_subjects:
+            print(f"Loaded {num_of_subjects} subjects")
+            break
+        print(f"loading {np_name}")
+        np_dataset.append(np_name)
+
+    train_loader, test_loader = data_generator_np(subject_files=np_dataset,
+                                                     batch_size=batch_size)
+
+    return train_loader, test_loader, np_dataset
 
 
 class LoadDataset_from_numpy(Dataset):
@@ -36,7 +53,6 @@ class LoadDataset_from_numpy(Dataset):
 
 
 def data_generator_np(subject_files, batch_size, train_test_ratio=0.8):
-
     shuffle_dataset = True
     random_seed = 42
 
@@ -73,9 +89,3 @@ def data_generator_np(subject_files, batch_size, train_test_ratio=0.8):
     print(f"test_loader length in batches: {len(test_loader)}")
 
     return train_loader, test_loader
-
-
-
-
-
-

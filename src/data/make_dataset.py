@@ -16,12 +16,10 @@ import src.utils as utils
 from src.data import dhedfreader
 from src.features.build_features import break_2_bands
 
-
-
 parser = argparse.ArgumentParser()
-parser.add_argument('--pre_processing', action='store_true', default=True)
-parser.add_argument('--nrof_subjects', type=int, default=3)
-parser.add_argument('--select_ch', nargs='*', default=['Fpz-Cz', 'Pz-Oz'])
+parser.add_argument('--pre_processing', action='store_true', default=False)
+parser.add_argument('--nrof_subjects', type=int, default=15)
+parser.add_argument('--select_ch', nargs='*', default=['EEG Fpz-Cz', 'EEG Pz-Oz'])
 parser.add_argument('--output_filepath', type=str, default=r'../../data/processed/')
 parser.add_argument('--subjects_to_folders',  default=True, choices=[True, False])
 parser.add_argument('--verbose', type=int, default=logging.INFO)
@@ -109,12 +107,12 @@ def prepare_physionet_files(files, output_dir, select_ch):
 
         sampling_rate = raw.info['sfreq']
         logger.debug(raw.info)
-        raw_ch_df = raw.to_data_frame(scalings=100.0)[select_ch]
+        df = raw.to_data_frame(scalings=100.0)[select_ch]
         # Preprocessing
         if args.pre_processing:
-            raw_ch_df = break_2_bands(raw_ch_df)
-        logger.debug(raw_ch_df.head())
-        raw_ch_df.set_index(np.arange(len(raw_ch_df)))
+            df = break_2_bands(df)
+        logger.debug(df.head())
+        df.set_index(np.arange(len(df)))
 
         # Get raw header
         f = open(psg, 'r', errors='ignore')
@@ -148,28 +146,28 @@ def prepare_physionet_files(files, output_dir, select_ch):
                 if duration_sec % EPOCH_SEC_SIZE != 0:
                     raise Exception("Something wrong")
                 duration_epoch = int(duration_sec / EPOCH_SEC_SIZE)
-                label_epoch = np.ones(duration_epoch, dtype=np.int) * label
+                label_epoch = np.ones(duration_epoch, dtype=int) * label
                 labels.append(label_epoch)
-                idx = int(onset_sec * sampling_rate) + np.arange(duration_sec * sampling_rate, dtype=np.int)
+                idx = int(onset_sec * sampling_rate) + np.arange(duration_sec * sampling_rate, dtype=int)
                 label_idx.append(idx)
 
                 logger.debug("Include onset:{}, duration:{}, label:{} ({})".format(
                     onset_sec, duration_sec, label, ann_str
                 ))
             else:
-                idx = int(onset_sec * sampling_rate) + np.arange(duration_sec * sampling_rate, dtype=np.int)
+                idx = int(onset_sec * sampling_rate) + np.arange(duration_sec * sampling_rate, dtype=int)
                 remove_idx.append(idx)
 
                 logger.debug("Remove onset:{}, duration:{}, label:{} ({})".format(
                     onset_sec, duration_sec, label, ann_str))
         labels = np.hstack(labels)
 
-        logger.debug("before remove unwanted: {}".format(np.arange(len(raw_ch_df)).shape))
+        logger.debug("before remove unwanted: {}".format(np.arange(len(df)).shape))
         if len(remove_idx) > 0:
             remove_idx = np.hstack(remove_idx)
-            select_idx = np.setdiff1d(np.arange(len(raw_ch_df)), remove_idx)
+            select_idx = np.setdiff1d(np.arange(len(df)), remove_idx)
         else:
-            select_idx = np.arange(len(raw_ch_df))
+            select_idx = np.arange(len(df))
         logger.debug("after remove unwanted: {}".format(select_idx.shape))
 
         # Select only the data with labels
@@ -193,7 +191,7 @@ def prepare_physionet_files(files, output_dir, select_ch):
             logger.debug("after remove extra labels: {}, {}".format(select_idx.shape, labels.shape))
 
         # Remove movement and unknown stages if any
-        raw_ch = raw_ch_df.values[select_idx]
+        raw_ch = df.values[select_idx]
 
         # Verify that we can split into 30-s epochs
         if len(raw_ch) % (EPOCH_SEC_SIZE * sampling_rate) != 0:
@@ -234,8 +232,11 @@ def prepare_physionet_files(files, output_dir, select_ch):
         if args.subjects_to_folders:
             makedirs(output_dir + f"{file_dir}")
             logger.info(f"Saving data into  {output_dir}{file_dir}")
-            print("\n\n")
             np.savez(os.path.join(output_dir + f"{file_dir}", filename), **save_dict)
+        else:
+            makedirs(output_dir)
+            logger.info(f"Saving data into  {output_dir}")
+            np.savez(os.path.join(output_dir, filename), **save_dict)
 
 
 def prepare_physionet(files_train, files_test, output_train_dir, output_test_dir, select_ch="Fpz-Cz"):
@@ -268,9 +269,6 @@ def main(output_filepath):
 
 if __name__ == '__main__':
     makedirs(args.output_filepath)
-
-    # not used in this stub but often useful for finding various files
-    project_dir = Path(__file__).resolve().parents[2]
 
     # find .env automagically by walking up directories until it's found, then
     # load up the .env entries as environment variables
