@@ -5,7 +5,7 @@ import numpy as np
 import glob
 
 
-def get_data_loaders(batch_size, directory_path, num_of_subjects=1):
+def get_data_loaders(batch_size_train, batch_size_test, directory_path, num_of_subjects=1):
     print(directory_path)
     np_dataset = []
     for idx, np_name in enumerate(glob.glob(directory_path + '/*.np[yz]')):
@@ -16,7 +16,8 @@ def get_data_loaders(batch_size, directory_path, num_of_subjects=1):
         np_dataset.append(np_name)
 
     train_loader, test_loader = data_generator_np(subject_files=np_dataset,
-                                                     batch_size=batch_size)
+                                                  batch_size_train=batch_size_train,
+                                                  batch_size_test=batch_size_test)
 
     return train_loader, test_loader, np_dataset
 
@@ -52,9 +53,8 @@ class LoadDataset_from_numpy(Dataset):
         return self.len
 
 
-def data_generator_np(subject_files, batch_size, train_test_ratio=0.8):
+def data_generator_np(subject_files, batch_size_train, batch_size_test, train_test_ratio=0.8):
     shuffle_dataset = True
-    random_seed = 42
 
     # Loading numpy dataset
     dataset = LoadDataset_from_numpy(subject_files)
@@ -64,7 +64,6 @@ def data_generator_np(subject_files, batch_size, train_test_ratio=0.8):
     indices = list(range(dataset_size))
     split = int(np.floor((1 - train_test_ratio) * dataset_size))
     if shuffle_dataset:
-        np.random.seed(random_seed)
         np.random.shuffle(indices)
 
     train_indices, test_indices = indices[split:], indices[:split]
@@ -74,13 +73,13 @@ def data_generator_np(subject_files, batch_size, train_test_ratio=0.8):
     test_sampler = SubsetRandomSampler(test_indices)
 
     train_loader = torch.utils.data.DataLoader(dataset=dataset,
-                                               batch_size=batch_size,
+                                               batch_size=batch_size_train,
                                                sampler=train_sampler,
                                                drop_last=False,
                                                num_workers=0)
 
     test_loader = torch.utils.data.DataLoader(dataset=dataset,
-                                              batch_size=batch_size,
+                                              batch_size=batch_size_test,
                                               sampler=test_sampler,
                                               drop_last=False,
                                               num_workers=0)

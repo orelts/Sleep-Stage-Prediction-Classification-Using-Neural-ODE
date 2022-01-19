@@ -39,6 +39,11 @@ def get_logger(log_path, logfilenames, displaying=True, saving=True, level="INFO
         log_file = log_file.split(".", 1)[0]
     logpath = os.path.join(log_path, log_file)
     logger = logging.getLogger()
+
+    # To get rid of multiple adding of handlers from a consecutive calls to loggers
+    while logger.handlers:
+        logger.handlers.pop()
+
     level = logging.getLevelName(level)
     logger.setLevel(level)
 
@@ -52,6 +57,5 @@ def get_logger(log_path, logfilenames, displaying=True, saving=True, level="INFO
         console_handler.setLevel(level)
         console_handler.setFormatter(CustomFormatter())
         logger.addHandler(console_handler)
-
 
     return logger, logpath

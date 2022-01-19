@@ -1,31 +1,40 @@
 import os
 import argparse
-import logging
 import time
-import numpy as np
-import torch
-import torch.nn as nn
-import matplotlib.pyplot as plt
 from models.model import *
 import src.utils as utils
+import joblib
+import optuna
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--network', type=str, choices=['resnet', 'odenet'], default='odenet')
-parser.add_argument('--data_dir', type=str, default=f'../../data/processed/')
+# Data folder
+parser.add_argument('--data_dir', type=str, default=f'../../data/processed/1')
 
-parser.add_argument('--tol', type=float, default=1e-3)
-parser.add_argument('--adjoint', type=eval, default=False, choices=[True, False])
+# Network
+parser.add_argument('--network', type=str, choices=['resnet', 'odenet'], default='odenet')
 parser.add_argument('--downsampling-method', type=str, default='conv', choices=['conv', 'res'])
+
+# Training
 parser.add_argument('--nepochs', type=int, default=120)
+parser.add_argument('--seed', type=int, default=15)
 parser.add_argument('--data_aug', type=eval, default=True, choices=[True, False])
+parser.add_argument('--tol', type=float, default=1e-3)
 parser.add_argument('--lr', type=float, default=0.0001)
 parser.add_argument('--batch_size', type=int, default=32)
-
+parser.add_argument('--adjoint', type=eval, default=False, choices=[True, False])
 parser.add_argument('--subject_count', type=int, default=None,
                     help="Limit the number of subjects we load from data folder")
+# Loggers
 parser.add_argument('--save', type=str, default='./logs/')
-parser.add_argument('--gpu', type=int, default=0)
 parser.add_argument('--log_level', type=str, default="DEBUG", choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"])
+
+# Device selection
+parser.add_argument('--gpu', type=int, default=0)
+
+# Optuna
+parser.add_argument("--optuna", action="store_true", default=False, help="Use Optuna to optimze hyperparameters")
+parser.add_argument("--pruning", action="store_true", help="Activate the pruning feature. `MedianPruner` stops "
+                                                           "unpromising trials at the early stages of training.")
 args = parser.parse_args()
 
 if args.adjoint:
@@ -84,48 +93,15 @@ def accuracy(model, dataset_loader, nof_classes=5):
     return total_correct / total
 
 
-if __name__ == '__main__':
-
-    #    _____          _
-    #   |  __ \        | |
-    #   | |  | |  __ _ | |_  __ _
-    #   | |  | | / _` || __|/ _` |
-    #   | |__| || (_| || |_| (_| |
-    #   |_____/  \__,_| \__|\__,_|
-    #
-    #
-    train_loader, test_loader, files_names = dl.get_data_loaders(batch_size=args.batch_size,
-                                                                 directory_path=args.data_dir)
-    data_gen = inf_generator(train_loader)
-    batches_per_epoch = len(train_loader)
-    num_of_classes = 5
-
-    # ============== Getting Logger ===================================================================
-    logger, path_to_save_log = utils.get_logger(log_path=args.save,
-                                                logfilenames=files_names,
-                                                level=args.log_level)
-
-    logger.info(f"Script Path: {os.path.abspath(__file__)}\n")
-    # ====================================================================================================
-    device = torch.device('cuda:' + str(args.gpu) if torch.cuda.is_available() else 'cpu')
-    logger.info(f"deivce: {device}, {torch.cuda.get_device_name(0)}\n")
-
-    #    __  __             _        _
-    #   |  \/  |           | |      | |
-    #   | \  / |  ___    __| |  ___ | |
-    #   | |\/| | / _ \  / _` | / _ \| |
-    #   | |  | || (_) || (_| ||  __/| |
-    #   |_|  |_| \___/  \__,_| \___||_|
-    #
-    #
+def define_model(num_of_classes=5, input_channels=10):
     # ======================= down sampling layer ============================================
     is_odenet = args.network == 'odenet'
 
     # TODO: get channel count from data dimensions
-    channel_count = 10
     if args.downsampling_method == 'conv':
         downsampling_layers = [
-            nn.Conv2d(channel_count, 64, 3, 1),  # changed to 10 channels because 2 channels are devided to 5 bands each
+            nn.Conv2d(input_channels, 64, 3, 1),
+            # changed to 10 channels because 2 channels are devided to 5 bands each
             norm(64),
             nn.ReLU(inplace=True),
             nn.Conv2d(64, 64, 4, 2, 1),
@@ -135,11 +111,10 @@ if __name__ == '__main__':
         ]
     elif args.downsampling_method == 'res':
         downsampling_layers = [
-            nn.Conv2d(1, 64, 3, 1),
+            nn.Conv2d(input_channels, 64, 3, 1),
             ResBlock(64, 64, stride=2, downsample=conv1x1(64, 64, 2)),
             ResBlock(64, 64, stride=2, downsample=conv1x1(64, 64, 2)),
         ]
-
     # =================== Feature Layer and classifier Layer ==============================================
     feature_layers = [ODEBlock(ODEfunc(64), odesolver=odeint, tol=args.tol)] if is_odenet else [ResBlock(64, 64) for _
                                                                                                 in range(6)]
@@ -147,25 +122,18 @@ if __name__ == '__main__':
                  nn.Linear(64, num_of_classes)]
 
     # Final model
-    model = nn.Sequential(*downsampling_layers, *feature_layers, *fc_layers).to(device)
+    model = nn.Sequential(*downsampling_layers, *feature_layers, *fc_layers)
 
-    logger.info(f"---Model")
-    logger.info(model)
-    logger.info('Number of parameters: {}\n'.format(count_parameters(model)))
+    return model, feature_layers
 
-    #    _______           _         _                 _____                                     _
-    #   |__   __|         (_)       (_)               |  __ \                                   | |
-    #      | | _ __  __ _  _  _ __   _  _ __    __ _  | |__) |__ _  _ __  __ _  _ __ ___    ___ | |_  ___  _ __  ___
-    #      | || '__|/ _` || || '_ \ | || '_ \  / _` | |  ___// _` || '__|/ _` || '_ ` _ \  / _ \| __|/ _ \| '__|/ __|
-    #      | || |  | (_| || || | | || || | | || (_| | | |   | (_| || |  | (_| || | | | | ||  __/| |_|  __/| |   \__ \
-    #      |_||_|   \__,_||_||_| |_||_||_| |_| \__, | |_|    \__,_||_|   \__,_||_| |_| |_| \___| \__|\___||_|   |___/
-    #                                           __/ |
-    #                                          |___/
-    criterion = nn.CrossEntropyLoss().to(device)
 
-    optimizer = torch.optim.Adam([
-        {'params': model.parameters()}
-    ], weight_decay=0.1, lr=args.lr)
+def train(model, train_loader, test_loader, cfg, feature_layers):
+    criterion = cfg['criterion'].to(device)
+
+    optimizer = cfg['optimizer'](model.parameters(), lr=cfg['lr'])
+
+    data_gen = inf_generator(train_loader)
+    batches_per_epoch = len(train_loader)
 
     best_acc = 0
     batch_time_meter = RunningAverageMeter()
@@ -174,20 +142,10 @@ if __name__ == '__main__':
     end = time.time()
     train_acc_lst = []
     test_acc_lst = []
-    logger.info(f"---Training Hyper parameters")
-    logger.info(f"Loss: {criterion}")
-    logger.info(f"Optimizer: {optimizer}\n")
 
-    #    _______           _         _
-    #   |__   __|         (_)       (_)
-    #      | | _ __  __ _  _  _ __   _  _ __    __ _
-    #      | || '__|/ _` || || '_ \ | || '_ \  / _` |
-    #      | || |  | (_| || || | | || || | | || (_| |
-    #      |_||_|   \__,_||_||_| |_||_||_| |_| \__, |
-    #                                           __/ |
-    #                                          |___/
+    is_odenet = args.network == 'odenet'
     logger.info("---Training")
-    for itr in range(args.nepochs * batches_per_epoch):
+    for itr in range(cfg['n_epochs'] * batches_per_epoch):
 
         optimizer.zero_grad()
         x, y = data_gen.__next__()
@@ -243,3 +201,112 @@ if __name__ == '__main__':
     plt.ylabel('Accuracy')
     plt.legend()
     plt.savefig(path_to_save_log)
+
+    return val_acc
+
+
+def train_physionet(trial: optuna.trial.Trial = None):
+
+    #    _______           _         _                 _____                                     _
+    #   |__   __|         (_)       (_)               |  __ \                                   | |
+    #      | | _ __  __ _  _  _ __   _  _ __    __ _  | |__) |__ _  _ __  __ _  _ __ ___    ___ | |_  ___  _ __  ___
+    #      | || '__|/ _` || || '_ \ | || '_ \  / _` | |  ___// _` || '__|/ _` || '_ ` _ \  / _ \| __|/ _ \| '__|/ __|
+    #      | || |  | (_| || || | | || || | | || (_| | | |   | (_| || |  | (_| || | | | | ||  __/| |_|  __/| |   \__ \
+    #      |_||_|   \__,_||_||_| |_||_||_| |_| \__, | |_|    \__,_||_|   \__,_||_| |_| |_| \___| \__|\___||_|   |___/
+    #                                           __/ |
+    #                                          |___/
+
+    cfg = {
+        'train_batch_size': args.batch_size,
+        'test_batch_size': 1000,
+        'n_epochs': args.nepochs,
+        "classes": 5,
+        'seed': args.seed,
+        'log_interval': 100,
+        'momentum': 0.5
+    }
+
+    # Can fine tune using optuna
+    if args.optuna:
+        test_parameters = {
+            'lr': trial.suggest_loguniform('lr', 1e-5, 1e-1),
+            'optimizer': trial.suggest_categorical('optimizer',[torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
+            'criterion': nn.CrossEntropyLoss()
+        }
+    else:
+        test_parameters = {
+            'lr': args.lr,
+            'optimizer': torch.optim.Adam,
+            'criterion': nn.CrossEntropyLoss()}
+
+    cfg.update(test_parameters)
+    np.random.seed(args.seed)
+    train_loader, test_loader, files_names = dl.get_data_loaders(batch_size_train=cfg['train_batch_size'],
+                                                                 batch_size_test=cfg['test_batch_size'],
+                                                                 directory_path=args.data_dir)
+
+    global logger
+    global path_to_save_log
+    logger, path_to_save_log = utils.get_logger(log_path=args.save, logfilenames=files_names, level=args.log_level)
+
+    logger.info(f"Script Path: {os.path.abspath(__file__)}\n")
+    if args.optuna:
+       logger.info(f"Optuna params {test_parameters}\n")
+    logger.info(f"Config: {cfg}\n")
+
+    #    __  __             _        _
+    #   |  \/  |           | |      | |
+    #   | \  / |  ___    __| |  ___ | |
+    #   | |\/| | / _ \  / _` | / _ \| |
+    #   | |  | || (_) || (_| ||  __/| |
+    #   |_|  |_| \___/  \__,_| \___||_|
+    #
+    #
+    model, feature_layers = define_model(num_of_classes=cfg['classes'], input_channels=10)
+    model = model.to(device)
+    logger.info(f"---Model")
+    logger.info(model)
+    logger.info('Number of parameters: {}\n'.format(count_parameters(model)))
+
+    #    _______           _         _
+    #   |__   __|         (_)       (_)
+    #      | | _ __  __ _  _  _ __   _  _ __    __ _
+    #      | || '__|/ _` || || '_ \ | || '_ \  / _` |
+    #      | || |  | (_| || || | | || || | | || (_| |
+    #      |_||_|   \__,_||_||_| |_||_||_| |_| \__, |
+    #                                           __/ |
+    #
+    val_acc = train(model, train_loader, test_loader, cfg, feature_layers)
+
+    logger.info(f"Final test accuracy {val_acc}")
+
+
+if __name__ == '__main__':
+    device = torch.device('cuda:' + str(args.gpu) if torch.cuda.is_available() else 'cpu')
+    global logger
+    global path_to_save_log
+
+    # Using optuna to optimize hyper parameters
+    if args.optuna:
+        pruner: optuna.pruners.BasePruner = (
+            optuna.pruners.MedianPruner() if args.pruning else optuna.pruners.NopPruner()
+        )
+        study = optuna.create_study(direction="maximize", pruner=pruner)
+        study.optimize(train_physionet, n_trials=50, timeout=600)
+
+        print("Number of finished trials: {}".format(len(study.trials)))
+
+        print("Best trial:")
+        trial = study.best_trial
+
+        print("  Value: {}".format(trial.value))
+
+        print("  Params: ")
+        for key, value in trial.params.items():
+            print("    {}: {}".format(key, value))
+
+        joblib.dump(study, path_to_save_log)
+
+    # Training with argument parser parameters
+    else:
+        train_physionet()
