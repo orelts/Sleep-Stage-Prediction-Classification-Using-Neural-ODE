@@ -5,7 +5,7 @@ import numpy as np
 import glob
 
 
-def get_data_loaders(batch_size_train, batch_size_test, directory_path, num_of_subjects=1):
+def get_data_loaders(batch_size_train, batch_size_test, directory_path,shuffle, num_of_subjects=1):
     print(directory_path)
     np_dataset = []
     for idx, np_name in enumerate(glob.glob(directory_path + '/*.np[yz]')):
@@ -17,7 +17,8 @@ def get_data_loaders(batch_size_train, batch_size_test, directory_path, num_of_s
 
     train_loader, test_loader = data_generator_np(subject_files=np_dataset,
                                                   batch_size_train=batch_size_train,
-                                                  batch_size_test=batch_size_test)
+                                                  batch_size_test=batch_size_test,
+                                                  shuffle=shuffle)
 
     return train_loader, test_loader, np_dataset
 
@@ -53,8 +54,8 @@ class LoadDataset_from_numpy(Dataset):
         return self.len
 
 
-def data_generator_np(subject_files, batch_size_train, batch_size_test, train_test_ratio=0.8):
-    shuffle_dataset = True
+def data_generator_np(subject_files, batch_size_train, batch_size_test,shuffle,train_test_ratio=0.8):
+    shuffle_dataset = shuffle
 
     # Loading numpy dataset
     dataset = LoadDataset_from_numpy(subject_files)

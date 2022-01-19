@@ -9,17 +9,18 @@ import optuna
 parser = argparse.ArgumentParser()
 # Data folder
 parser.add_argument('--data_dir', type=str, default=f'../../data/processed/1')
+parser.add_argument('--shuffle_epochs', type=eval, default=True, choices=[True, False])
 
 # Network
 parser.add_argument('--network', type=str, choices=['resnet', 'odenet'], default='odenet')
 parser.add_argument('--downsampling-method', type=str, default='conv', choices=['conv', 'res'])
 
 # Training
-parser.add_argument('--nepochs', type=int, default=120)
+parser.add_argument('--nepochs', type=int, default=80)
 parser.add_argument('--seed', type=int, default=15)
 parser.add_argument('--data_aug', type=eval, default=True, choices=[True, False])
 parser.add_argument('--tol', type=float, default=1e-3)
-parser.add_argument('--lr', type=float, default=0.0001)
+parser.add_argument('--lr', type=float, default=0.009449285433637801)
 parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--adjoint', type=eval, default=False, choices=[True, False])
 parser.add_argument('--subject_count', type=int, default=None,
@@ -230,8 +231,8 @@ def train_physionet(trial: optuna.trial.Trial = None):
     # Can fine tune using optuna
     if args.optuna:
         test_parameters = {
-            'lr': trial.suggest_loguniform('lr', 1e-5, 1e-2),
-            'optimizer': trial.suggest_categorical('optimizer', [torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop])
+            'lr': trial.suggest_loguniform('lr', 1e-3, 1e-1),
+            'optimizer': torch.optim.Adam
 
         }
     else:
@@ -244,7 +245,8 @@ def train_physionet(trial: optuna.trial.Trial = None):
     np.random.seed(args.seed)
     train_loader, test_loader, files_names = dl.get_data_loaders(batch_size_train=cfg['train_batch_size'],
                                                                  batch_size_test=cfg['test_batch_size'],
-                                                                 directory_path=args.data_dir)
+                                                                 directory_path=args.data_dir,
+                                                                 shuffle=args.shuffle_epochs)
 
     global logger
     global path_to_save_log
@@ -295,7 +297,7 @@ if __name__ == '__main__':
             optuna.pruners.MedianPruner() if args.pruning else optuna.pruners.NopPruner()
         )
         study = optuna.create_study(direction="maximize", pruner=pruner)
-        study.optimize(train_physionet, n_trials=20, timeout=34000)
+        study.optimize(train_physionet, n_trials=15, timeout=34000)
 
         print("Number of finished trials: {}".format(len(study.trials)))
 
