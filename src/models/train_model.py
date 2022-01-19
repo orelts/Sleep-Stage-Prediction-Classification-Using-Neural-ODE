@@ -230,7 +230,7 @@ def train_physionet(trial: optuna.trial.Trial = None):
     # Can fine tune using optuna
     if args.optuna:
         test_parameters = {
-            'lr': trial.suggest_loguniform('lr', 1e-5, 1e-1),
+            'lr': trial.suggest_loguniform('lr', 1e-5, 1e-2),
             'optimizer': trial.suggest_categorical('optimizer', [torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop])
 
         }
@@ -295,7 +295,7 @@ if __name__ == '__main__':
             optuna.pruners.MedianPruner() if args.pruning else optuna.pruners.NopPruner()
         )
         study = optuna.create_study(direction="maximize", pruner=pruner)
-        study.optimize(train_physionet, n_trials=50, timeout=36000)
+        study.optimize(train_physionet, n_trials=20, timeout=34000)
 
         print("Number of finished trials: {}".format(len(study.trials)))
 
