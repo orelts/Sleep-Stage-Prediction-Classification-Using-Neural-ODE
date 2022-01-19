@@ -223,21 +223,22 @@ def train_physionet(trial: optuna.trial.Trial = None):
         "classes": 5,
         'seed': args.seed,
         'log_interval': 100,
-        'momentum': 0.5
+        'momentum': 0.5,
+        'criterion': nn.CrossEntropyLoss()
     }
 
     # Can fine tune using optuna
     if args.optuna:
         test_parameters = {
             'lr': trial.suggest_loguniform('lr', 1e-5, 1e-1),
-            'optimizer': trial.suggest_categorical('optimizer',[torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop]),
-            'criterion': nn.CrossEntropyLoss()
+            'optimizer': trial.suggest_categorical('optimizer', [torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop])
+
         }
     else:
         test_parameters = {
             'lr': args.lr,
-            'optimizer': torch.optim.Adam,
-            'criterion': nn.CrossEntropyLoss()}
+            'optimizer': torch.optim.Adam
+        }
 
     cfg.update(test_parameters)
     np.random.seed(args.seed)
@@ -276,9 +277,11 @@ def train_physionet(trial: optuna.trial.Trial = None):
     #      |_||_|   \__,_||_||_| |_||_||_| |_| \__, |
     #                                           __/ |
     #
-    val_acc = train(model, train_loader, test_loader, cfg, feature_layers)
+    test_acc = train(model, train_loader, test_loader, cfg, feature_layers)
 
-    logger.info(f"Final test accuracy {val_acc}")
+    logger.info(f"Final test accuracy {test_acc}")
+
+    return test_acc
 
 
 if __name__ == '__main__':
@@ -292,7 +295,7 @@ if __name__ == '__main__':
             optuna.pruners.MedianPruner() if args.pruning else optuna.pruners.NopPruner()
         )
         study = optuna.create_study(direction="maximize", pruner=pruner)
-        study.optimize(train_physionet, n_trials=50, timeout=600)
+        study.optimize(train_physionet, n_trials=2, timeout=36000)
 
         print("Number of finished trials: {}".format(len(study.trials)))
 
@@ -305,7 +308,7 @@ if __name__ == '__main__':
         for key, value in trial.params.items():
             print("    {}: {}".format(key, value))
 
-        joblib.dump(study, path_to_save_log)
+        joblib.dump(study, path_to_save_log + ".pkl")
 
     # Training with argument parser parameters
     else:
