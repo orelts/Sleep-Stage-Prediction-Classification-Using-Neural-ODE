@@ -231,8 +231,8 @@ def train_physionet(trial: optuna.trial.Trial = None):
     # Can fine tune using optuna
     if args.optuna:
         test_parameters = {
-            'lr': trial.suggest_loguniform('lr', 1e-3, 1e-1),
-            'optimizer': torch.optim.Adam
+            'lr': trial.suggest_loguniform('lr', 1e-5, 1e-2),
+            'optimizer': trial.suggest_categorical('optimizer', [torch.optim.Adam, torch.optim.SGD, torch.optim.RMSprop])
 
         }
     else:
@@ -245,8 +245,7 @@ def train_physionet(trial: optuna.trial.Trial = None):
     np.random.seed(args.seed)
     train_loader, test_loader, files_names = dl.get_data_loaders(batch_size_train=cfg['train_batch_size'],
                                                                  batch_size_test=cfg['test_batch_size'],
-                                                                 directory_path=args.data_dir,
-                                                                 shuffle=args.shuffle_epochs)
+                                                                 directory_path=args.data_dir)
 
     global logger
     global path_to_save_log
