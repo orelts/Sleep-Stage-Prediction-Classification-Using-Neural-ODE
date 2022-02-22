@@ -14,18 +14,19 @@ import os
 import argparse
 import src.utils as utils
 from src.data import dhedfreader
-from src.features.build_features import break_2_bands
+from src.features.build_features import break_2_bands, channels_fft
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--pre_processing', action='store_true', default=False)
+parser.add_argument('--pre_processing', type=int, default=0, choices=[0, 1, 2], help="0-no preprocessing, "
+                                                                                     "1-brake to bands, "
+                                                                                     "2-FFT")
 parser.add_argument('--nrof_subjects', type=int, default=15)
 parser.add_argument('--select_ch', nargs='*', default=['EEG Fpz-Cz', 'EEG Pz-Oz'])
 parser.add_argument('--output_filepath', type=str, default=r'../../data/processed/')
-parser.add_argument('--subjects_to_folders',  default=True, choices=[True, False])
+parser.add_argument('--subjects_to_folders', default=True, choices=[True, False])
 parser.add_argument('--verbose', type=int, default=logging.INFO)
 
 args = parser.parse_args()
-
 
 # Data source and documentation https://physionet.org/content/sleep-edfx/1.0.0/
 """
@@ -36,7 +37,6 @@ For each subject we load data from 2 files.
 For the EEG we have few channels recorded depends if its Sleep Telemetry or Sleep cassette.
 """
 
-
 # Label values
 W = 0
 N1 = 1
@@ -44,7 +44,6 @@ N2 = 2
 N3 = 3
 REM = 4
 UNKNOWN = 5
-
 
 stage_dict = {
     "W": W,
@@ -109,8 +108,10 @@ def prepare_physionet_files(files, output_dir, select_ch):
         logger.debug(raw.info)
         df = raw.to_data_frame(scalings=100.0)[select_ch]
         # Preprocessing
-        if args.pre_processing:
+        if args.pre_processing == 1:
             df = break_2_bands(df)
+        elif args.pre_processing == 2:
+            df = channels_fft(df)
         logger.debug(df.head())
         df.set_index(np.arange(len(df)))
 
@@ -258,7 +259,13 @@ def main(output_filepath):
     ch.setFormatter(utils.CustomFormatter())
     logger.addHandler(ch)
 
+    # Fetching subjects, there are few unknown subjects that their indices need to be removed from fetching list.
     subjects = list(range(args.nrof_subjects))
+    unknown_subjects = [36, 39, 52, 68, 69, 78, 79]
+    for unknown in unknown_subjects:
+        if unknown in subjects:
+            subjects.remove(unknown)
+
     logger.info(f'Fetching  subjects {subjects} from physionet dataset ')
 
     files = fetch_data(subjects=subjects, recording=[1])

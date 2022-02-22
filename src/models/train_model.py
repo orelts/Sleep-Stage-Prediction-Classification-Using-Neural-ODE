@@ -5,6 +5,7 @@ from models.model import *
 import src.utils as utils
 import joblib
 import optuna
+from csv import writer
 
 parser = argparse.ArgumentParser()
 # Data folder
@@ -202,6 +203,17 @@ def train(model, train_loader, test_loader, cfg, feature_layers):
     plt.ylabel('Accuracy')
     plt.legend()
     plt.savefig(path_to_save_log)
+
+    # Adding to CSV file the last train and test results
+    name = os.path.basename(path_to_save_log)
+    with open('Results.csv', 'a', newline='') as f_object:
+        # Pass the CSV  file object to the writer() function
+        writer_object = writer(f_object)
+        # Result - a writer object
+        # Pass the data in the list as an argument into the writerow() function
+        writer_object.writerow([name, train_acc, val_acc])
+        # Close the file object
+        f_object.close()
 
     return val_acc
 
