@@ -1,3 +1,4 @@
+# !/usr/bin/python3
 import os
 import argparse
 import time
@@ -259,6 +260,7 @@ def train_physionet(trial: optuna.trial.Trial = None):
                                                                  batch_size_test=cfg['test_batch_size'],
                                                                  directory_path=args.data_dir)
 
+    input_channels = next(iter(train_loader))[0].shape[1]
     global logger
     global path_to_save_log
     logger, path_to_save_log = utils.get_logger(log_path=args.save, logfilenames=files_names, level=args.log_level)
@@ -276,7 +278,7 @@ def train_physionet(trial: optuna.trial.Trial = None):
     #   |_|  |_| \___/  \__,_| \___||_|
     #
     #
-    model, feature_layers = define_model(num_of_classes=cfg['classes'], input_channels=10)
+    model, feature_layers = define_model(num_of_classes=cfg['classes'], input_channels=input_channels)
     model = model.to(device)
     logger.info(f"---Model")
     logger.info(model)
@@ -308,7 +310,7 @@ if __name__ == '__main__':
             optuna.pruners.MedianPruner() if args.pruning else optuna.pruners.NopPruner()
         )
         study = optuna.create_study(direction="maximize", pruner=pruner)
-        study.optimize(train_physionet, n_trials=15, timeout=34000)
+        study.optimize(train_physionet, n_trials=50, timeout=34000)
 
         print("Number of finished trials: {}".format(len(study.trials)))
 

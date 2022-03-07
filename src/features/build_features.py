@@ -14,9 +14,9 @@ def break_2_bands(df):
     """
     delta = [0.4, 4]
     theta = [4, 8]
-    alpha = [8, 13]
-    sigma = [13, 22]
-    beta = [30, 49.5]
+    alpha = [8, 11.5]
+    sigma = [11.5, 15.5]
+    beta = [15.5, 30]
     bands = [delta, theta, alpha, sigma, beta]
     
     num_of_channels = df.ndim
@@ -46,7 +46,9 @@ def channels_fft(df):
     intermidiate_dict = {}
     for channel in range(num_of_channels):
         column_name = f"{df.columns[channel]}_fft"
-        channel_fft = fft(df.iloc[:, channel].values)
+        sos = signal.butter(6, Wn=49, fs=100, output='sos')
+        filtered = signal.sosfilt(sos, df.iloc[:, channel].values)
+        channel_fft = abs(fft(filtered))
         intermidiate_dict[column_name] = channel_fft
 
     new_df = pd.DataFrame(data=intermidiate_dict)
