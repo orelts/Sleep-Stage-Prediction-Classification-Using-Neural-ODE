@@ -184,7 +184,7 @@ def train(model, train_loader, test_loader, cfg, feature_layers):
                 train_acc_lst.append(train_acc)
                 test_acc_lst.append(val_acc)
                 if val_acc > best_acc:
-                    torch.save({'state_dict': model.state_dict(), 'args': args}, os.path.join(args.save, 'model.pth'))
+                    torch.save({'state_dict': model.state_dict(), 'args': args}, os.path.join(log_dir, 'model.pth'))
                     best_acc = val_acc
                 logger.info(
                     "Epoch {:04d} | Time {:.3f} ({:.3f}) | NFE-F {:.1f} | NFE-B {:.1f} | "
@@ -264,7 +264,8 @@ def train_physionet(trial: optuna.trial.Trial = None):
     input_channels = next(iter(train_loader))[0].shape[1]
     global logger
     global path_to_save_log
-    logger, path_to_save_log = utils.get_logger(log_path=args.save, logfilenames=files_names, level=args.log_level)
+    global log_dir
+    logger, path_to_save_log, log_dir = utils.get_logger(log_path=args.save, logfilenames=files_names, level=args.log_level)
 
     logger.info(f"Script Path: {os.path.abspath(__file__)}\n")
     if args.optuna:

@@ -31,13 +31,14 @@ def makedirs(dirname):
 
 
 def get_logger(log_path, logfilenames, displaying=True, saving=True, level="INFO"):
-    makedirs(log_path)
+    log_dir = os.path.dirname(log_path)
+    makedirs(log_dir)
     log_file = os.path.basename(log_path)
     if log_file == "":
         log_file = "_".join(logfilenames)
         log_file = os.path.basename(log_file)
         log_file = log_file.split(".", 1)[0]
-    logpath = os.path.join(log_path, log_file)
+    logpath = os.path.join(log_dir, log_file)
     logger = logging.getLogger()
 
     # To get rid of multiple adding of handlers from a consecutive calls to loggers
@@ -58,4 +59,4 @@ def get_logger(log_path, logfilenames, displaying=True, saving=True, level="INFO
         console_handler.setFormatter(CustomFormatter())
         logger.addHandler(console_handler)
 
-    return logger, logpath
+    return logger, logpath, log_dir
