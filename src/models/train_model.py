@@ -100,7 +100,6 @@ def define_model(num_of_classes=5, input_channels=10):
     # ======================= down sampling layer ============================================
     is_odenet = args.network == 'odenet'
 
-    # TODO: get channel count from data dimensions
     if args.downsampling_method == 'conv':
         downsampling_layers = [
             nn.Conv2d(input_channels, 64, 3, 1),
