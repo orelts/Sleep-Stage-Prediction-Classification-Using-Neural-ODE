@@ -11,6 +11,7 @@ from csv import writer
 parser = argparse.ArgumentParser()
 # Data folder
 parser.add_argument('--data_dir', type=str, default=f'../../data/processed/1')
+parser.add_argument('--nrof_files', type=int, default=1)
 parser.add_argument('--shuffle_epochs', type=eval, default=True, choices=[True, False])
 
 # Network
@@ -257,7 +258,8 @@ def train_physionet(trial: optuna.trial.Trial = None):
     np.random.seed(args.seed)
     train_loader, test_loader, files_names = dl.get_data_loaders(batch_size_train=cfg['train_batch_size'],
                                                                  batch_size_test=cfg['test_batch_size'],
-                                                                 directory_path=args.data_dir)
+                                                                 directory_path=args.data_dir,
+                                                                 num_of_subjects=args.nrof_files)
 
     input_channels = next(iter(train_loader))[0].shape[1]
     global logger
