@@ -22,7 +22,7 @@ import src.utils as utils
 #   |___/ \__,_| \__|\__,_| |_|   \_,_||_||_|\__| \__||_|\___/|_||_|/__/
 #
 
-def adjust_sleep_data_dim(data, to_image_dim=20):
+def adjust_sleep_data_dim(data, to_image_dim=20, is_psd=False):
     """
     Reshape: tensor.Size(batch_size, ch_count, sleep_epoch=3000) to tensor.Size(batch_size, ch_count, 20, 150)
     Args:
@@ -33,6 +33,11 @@ def adjust_sleep_data_dim(data, to_image_dim=20):
         x from dataloader.__getitem__ method reshaped to fit MNIST model conv layers. Kernel can't be larger
         than x dimensions
     """
+    if is_psd:
+        data = torch.transpose(data, 2, 1).unsqueeze(3)
+        data = data.float()
+        return data
+
     if data.shape[1] > 1:
         data = data.unsqueeze(2)
     else:

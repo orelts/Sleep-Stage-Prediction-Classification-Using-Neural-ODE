@@ -13,6 +13,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--data_dir', type=str, default=f'../../data/processed/1')
 parser.add_argument('--nrof_files', type=int, default=1)
 parser.add_argument('--shuffle_epochs', type=eval, default=True, choices=[True, False])
+parser.add_argument('--is_psd', type=eval, default=False, choices=[True, False])
 
 # Network
 parser.add_argument('--network', type=str, choices=['resnet', 'odenet'], default='odenet')
@@ -86,7 +87,7 @@ def accuracy(model, dataset_loader, nof_classes=5):
     total_correct = 0
     total = 0
     for x, y in dataset_loader:
-        x = adjust_sleep_data_dim(data=x)
+        x = adjust_sleep_data_dim(data=x, is_psd=args.is_psd)
         x = x.to(device)
         y = one_hot(np.array(y.numpy()), nof_classes)
 
@@ -102,16 +103,28 @@ def define_model(num_of_classes=5, input_channels=10):
     is_odenet = args.network == 'odenet'
 
     if args.downsampling_method == 'conv':
-        downsampling_layers = [
-            nn.Conv2d(input_channels, 64, 3, 1),
-            # changed to 10 channels because 2 channels are devided to 5 bands each
-            norm(64),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(64, 64, 4, 2, 1),
-            norm(64),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(64, 64, 4, 2, 1),
-        ]
+        if args.is_psd:
+            downsampling_layers = [
+                nn.Conv2d(input_channels, 64, 1, 1),
+                # changed to 10 channels because 2 channels are devided to 5 bands each
+                norm(64),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(64, 64, 3, 2, 1),
+                norm(64),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(64, 64, 3, 2, 1),
+            ]
+        else:
+            downsampling_layers = [
+                nn.Conv2d(input_channels, 64, 3, 1),
+                # changed to 10 channels because 2 channels are devided to 5 bands each
+                norm(64),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(64, 64, 4, 2, 1),
+                norm(64),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(64, 64, 4, 2, 1),
+            ]
     elif args.downsampling_method == 'res':
         downsampling_layers = [
             nn.Conv2d(input_channels, 64, 3, 1),
@@ -152,7 +165,7 @@ def train(model, train_loader, test_loader, cfg, feature_layers):
 
         optimizer.zero_grad()
         x, y = data_gen.__next__()
-        x = adjust_sleep_data_dim(data=x)
+        x = adjust_sleep_data_dim(data=x, is_psd=args.is_psd)
         x = x.to(device)
         y = y.to(device)
         logits = model(x)
@@ -261,7 +274,11 @@ def train_physionet(trial: optuna.trial.Trial = None):
                                                                  directory_path=args.data_dir,
                                                                  num_of_subjects=args.nrof_files)
 
-    input_channels = next(iter(train_loader))[0].shape[1]
+    if args.psd:
+        input_channels = next(iter(train_loader))[0].shape[2]
+    else:
+        input_channels = next(iter(train_loader))[0].shape[1]
+
     global logger
     global path_to_save_log
     global log_dir
