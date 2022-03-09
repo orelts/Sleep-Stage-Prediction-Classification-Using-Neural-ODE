@@ -3,6 +3,7 @@ from scipy import signal
 from scipy.fftpack import fft
 from mne.time_frequency import psd_welch
 import numpy as np
+import mne
 
 delta = [0.4, 4]
 theta = [4, 8]
@@ -59,6 +60,47 @@ def channels_fft(df):
     return new_df
 
 
+def prepare_epcohs(raw, anno, select_ch=None):
+
+    if select_ch is None:
+        select_ch = ["EEG Fpz-Cz", "EEG Pz-Oz"]
+
+    sampling_rate = raw.info['sfreq']
+    annot = mne.read_annotations(anno)
+
+    annotation_desc_2_event_id = {'Sleep stage W': 1,
+                                  'Sleep stage 1': 2,
+                                  'Sleep stage 2': 3,
+                                  'Sleep stage 3': 4,
+                                  'Sleep stage 4': 4,
+                                  'Sleep stage R': 5}
+
+    # keep last 30-min wake events before sleep and first 30-min wake events after
+    # sleep and redefine annotations on raw data
+    annot.crop(annot[1]['onset'] - 30 * 60,
+               annot[-2]['onset'] + 30 * 60)
+    raw.set_annotations(annot, emit_warning=False)
+
+    events, _ = mne.events_from_annotations(
+        raw, event_id=annotation_desc_2_event_id, chunk_duration=30.)
+
+    # create a new event_id that unifies stages 3 and 4
+    event_id = {'Sleep stage W': 1,
+                'Sleep stage 1': 2,
+                'Sleep stage 2': 3,
+                'Sleep stage 3/4': 4,
+                'Sleep stage R': 5}
+
+    # Create Epochs from the data based on the events found in the annotations
+    tmax = 30. - 1. / sampling_rate  # tmax in included
+
+    epochs = mne.Epochs(raw=raw, events=events, preload=True,
+                        event_id=event_id, tmin=0., tmax=tmax, baseline=None)
+    epochs_eeg = epochs.pick_channels(select_ch)
+
+    return epochs_eeg
+
+
 def eeg_power_band(epochs):
     """EEG relative power band feature extraction.
 
@@ -89,7 +131,11 @@ def eeg_power_band(epochs):
 
     X = []
     for fmin, fmax in FREQ_BANDS.values():
+        # Average over the frequencies of each band.
         psds_band = psds[:, :, (freqs >= fmin) & (freqs < fmax)].mean(axis=-1)
         X.append(psds_band.reshape(len(psds), -1))
 
-    return np.concatenate(X, axis=1)
+    X = np.concatenate(X, axis=1)
+    y = epochs.events[:, 2]
+
+    return X, y

@@ -14,12 +14,13 @@ import os
 import argparse
 import src.utils as utils
 from src.data import dhedfreader
-from src.features.build_features import break_2_bands, channels_fft
+from src.features.build_features import break_2_bands, channels_fft, eeg_power_band, prepare_epcohs
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--pre_processing', type=int, default=0, choices=[0, 1, 2], help="0-no preprocessing, "
-                                                                                     "1-brake to bands, "
-                                                                                     "2-FFT")
+parser.add_argument('--pre_processing', type=int, default=0, choices=[0, 1, 2, 3], help="0-no preprocessing, "
+                                                                                        "1-brake to bands, "
+                                                                                        "2-FFT, "
+                                                                                        "3-PSD")
 parser.add_argument('--nrof_subjects', type=int, default=15)
 parser.add_argument('--select_ch', nargs='*', default=['EEG Fpz-Cz', 'EEG Pz-Oz'])
 parser.add_argument('--output_filepath', type=str, default=r'../../data/processed/')
@@ -102,18 +103,6 @@ def prepare_physionet_files(files, output_dir, select_ch):
         anno = file[1]
         filename = ntpath.basename(psg).replace("-PSG.edf", ".npz")
         logger.info(f"Preparing Subject {file}")
-        raw = mne.io.read_raw_edf(psg, preload=True, stim_channel=None)
-
-        sampling_rate = raw.info['sfreq']
-        logger.debug(raw.info)
-        df = raw.to_data_frame(scalings=100.0)[select_ch]
-        # Preprocessing
-        if args.pre_processing == 1:
-            df = break_2_bands(df)
-        elif args.pre_processing == 2:
-            df = channels_fft(df)
-        logger.debug(df.head())
-        df.set_index(np.arange(len(df)))
 
         # Get raw header
         f = open(psg, 'r', errors='ignore')
@@ -121,102 +110,123 @@ def prepare_physionet_files(files, output_dir, select_ch):
         reader_raw.read_header()
         h_raw = reader_raw.header
         f.close()
-        raw_start_dt = datetime.strptime(h_raw['date_time'], "%Y-%m-%d %H:%M:%S")
 
         # Read annotation and its header
         f = open(anno, 'r', errors='ignore')
         reader_ann = dhedfreader.BaseEDFReader(f)
         reader_ann.read_header()
         h_ann = reader_ann.header
-        _, _, ann = zip(*reader_ann.records())
-        f.close()
-        ann_start_dt = datetime.strptime(h_ann['date_time'], "%Y-%m-%d %H:%M:%S")
 
-        # Assert that raw and annotation files start at the same time
-        assert raw_start_dt == ann_start_dt
+        raw = mne.io.read_raw_edf(psg, preload=True, stim_channel=None)
 
-        # Generate label and remove indices
-        remove_idx = []  # indicies of the data that will be removed
-        labels = []  # indicies of the data that have labels
-        label_idx = []
-        for a in ann[0]:
-            onset_sec, duration_sec, ann_char = a
-            ann_str = "".join(ann_char)
-            label = ann2label[ann_str[2:-1]]
-            if label != UNKNOWN:
-                if duration_sec % EPOCH_SEC_SIZE != 0:
-                    raise Exception("Something wrong")
-                duration_epoch = int(duration_sec / EPOCH_SEC_SIZE)
-                label_epoch = np.ones(duration_epoch, dtype=int) * label
-                labels.append(label_epoch)
-                idx = int(onset_sec * sampling_rate) + np.arange(duration_sec * sampling_rate, dtype=int)
-                label_idx.append(idx)
+        sampling_rate = raw.info['sfreq']
+        logger.debug(raw.info)
+        df = raw.to_data_frame(scalings=100.0)[select_ch]
 
-                logger.debug("Include onset:{}, duration:{}, label:{} ({})".format(
-                    onset_sec, duration_sec, label, ann_str
-                ))
+        # Preprocessing
+        if args.pre_processing == 1:
+            df = break_2_bands(df)
+        elif args.pre_processing == 2:
+            df = channels_fft(df)
+        elif args.preprocessing == 3:
+            epcohs = prepare_epcohs(raw=raw, anno=anno, select_ch=select_ch)
+            x, y = eeg_power_band(epochs=epcohs)
+
+        if args.preprocessing != 3:
+            logger.debug(df.head())
+            df.set_index(np.arange(len(df)))
+
+            raw_start_dt = datetime.strptime(h_raw['date_time'], "%Y-%m-%d %H:%M:%S")
+
+            _, _, ann = zip(*reader_ann.records())
+            f.close()
+            ann_start_dt = datetime.strptime(h_ann['date_time'], "%Y-%m-%d %H:%M:%S")
+
+            # Assert that raw and annotation files start at the same time
+            assert raw_start_dt == ann_start_dt
+
+            # Generate label and remove indices
+            remove_idx = []  # indicies of the data that will be removed
+            labels = []  # indicies of the data that have labels
+            label_idx = []
+            for a in ann[0]:
+                onset_sec, duration_sec, ann_char = a
+                ann_str = "".join(ann_char)
+                label = ann2label[ann_str[2:-1]]
+                if label != UNKNOWN:
+                    if duration_sec % EPOCH_SEC_SIZE != 0:
+                        raise Exception("Something wrong")
+                    duration_epoch = int(duration_sec / EPOCH_SEC_SIZE)
+                    label_epoch = np.ones(duration_epoch, dtype=int) * label
+                    labels.append(label_epoch)
+                    idx = int(onset_sec * sampling_rate) + np.arange(duration_sec * sampling_rate, dtype=int)
+                    label_idx.append(idx)
+
+                    logger.debug("Include onset:{}, duration:{}, label:{} ({})".format(
+                        onset_sec, duration_sec, label, ann_str
+                    ))
+                else:
+                    idx = int(onset_sec * sampling_rate) + np.arange(duration_sec * sampling_rate, dtype=int)
+                    remove_idx.append(idx)
+
+                    logger.debug("Remove onset:{}, duration:{}, label:{} ({})".format(
+                        onset_sec, duration_sec, label, ann_str))
+            labels = np.hstack(labels)
+
+            logger.debug("before remove unwanted: {}".format(np.arange(len(df)).shape))
+            if len(remove_idx) > 0:
+                remove_idx = np.hstack(remove_idx)
+                select_idx = np.setdiff1d(np.arange(len(df)), remove_idx)
             else:
-                idx = int(onset_sec * sampling_rate) + np.arange(duration_sec * sampling_rate, dtype=int)
-                remove_idx.append(idx)
+                select_idx = np.arange(len(df))
+            logger.debug("after remove unwanted: {}".format(select_idx.shape))
 
-                logger.debug("Remove onset:{}, duration:{}, label:{} ({})".format(
-                    onset_sec, duration_sec, label, ann_str))
-        labels = np.hstack(labels)
+            # Select only the data with labels
+            logger.debug("before intersect label: {}".format(select_idx.shape))
+            label_idx = np.hstack(label_idx)
+            select_idx = np.intersect1d(select_idx, label_idx)
+            logger.debug("after intersect label: {}".format(select_idx.shape))
 
-        logger.debug("before remove unwanted: {}".format(np.arange(len(df)).shape))
-        if len(remove_idx) > 0:
-            remove_idx = np.hstack(remove_idx)
-            select_idx = np.setdiff1d(np.arange(len(df)), remove_idx)
-        else:
-            select_idx = np.arange(len(df))
-        logger.debug("after remove unwanted: {}".format(select_idx.shape))
+            # Remove extra index
+            if len(label_idx) > len(select_idx):
+                logger.debug("before remove extra labels: {}, {}".format(select_idx.shape, labels.shape))
+                extra_idx = np.setdiff1d(label_idx, select_idx)
+                # Trim the tail
+                if np.all(extra_idx > select_idx[-1]):
+                    # n_trims = len(select_idx) % int(EPOCH_SEC_SIZE * sampling_rate)
+                    # n_label_trims = int(math.ceil(n_trims / (EPOCH_SEC_SIZE * sampling_rate)))
+                    n_label_trims = int(math.ceil(len(extra_idx) / (EPOCH_SEC_SIZE * sampling_rate)))
+                    if n_label_trims != 0:
+                        # select_idx = select_idx[:-n_trims]
+                        labels = labels[:-n_label_trims]
+                logger.debug("after remove extra labels: {}, {}".format(select_idx.shape, labels.shape))
 
-        # Select only the data with labels
-        logger.debug("before intersect label: {}".format(select_idx.shape))
-        label_idx = np.hstack(label_idx)
-        select_idx = np.intersect1d(select_idx, label_idx)
-        logger.debug("after intersect label: {}".format(select_idx.shape))
+            # Remove movement and unknown stages if any
+            raw_ch = df.values[select_idx]
 
-        # Remove extra index
-        if len(label_idx) > len(select_idx):
-            logger.debug("before remove extra labels: {}, {}".format(select_idx.shape, labels.shape))
-            extra_idx = np.setdiff1d(label_idx, select_idx)
-            # Trim the tail
-            if np.all(extra_idx > select_idx[-1]):
-                # n_trims = len(select_idx) % int(EPOCH_SEC_SIZE * sampling_rate)
-                # n_label_trims = int(math.ceil(n_trims / (EPOCH_SEC_SIZE * sampling_rate)))
-                n_label_trims = int(math.ceil(len(extra_idx) / (EPOCH_SEC_SIZE * sampling_rate)))
-                if n_label_trims != 0:
-                    # select_idx = select_idx[:-n_trims]
-                    labels = labels[:-n_label_trims]
-            logger.debug("after remove extra labels: {}, {}".format(select_idx.shape, labels.shape))
+            # Verify that we can split into 30-s epochs
+            if len(raw_ch) % (EPOCH_SEC_SIZE * sampling_rate) != 0:
+                raise Exception("Something wrong")
+            n_epochs = len(raw_ch) / (EPOCH_SEC_SIZE * sampling_rate)
 
-        # Remove movement and unknown stages if any
-        raw_ch = df.values[select_idx]
+            # Get epochs and their corresponding labels
+            x = np.asarray(np.split(raw_ch, n_epochs)).astype(np.float32)
+            y = labels.astype(np.int32)
 
-        # Verify that we can split into 30-s epochs
-        if len(raw_ch) % (EPOCH_SEC_SIZE * sampling_rate) != 0:
-            raise Exception("Something wrong")
-        n_epochs = len(raw_ch) / (EPOCH_SEC_SIZE * sampling_rate)
+            assert len(x) == len(y)
 
-        # Get epochs and their corresponding labels
-        x = np.asarray(np.split(raw_ch, n_epochs)).astype(np.float32)
-        y = labels.astype(np.int32)
-
-        assert len(x) == len(y)
-
-        # Select on sleep periods
-        w_edge_mins = 30
-        nw_idx = np.where(y != stage_dict["W"])[0]
-        start_idx = nw_idx[0] - (w_edge_mins * 2)
-        end_idx = nw_idx[-1] + (w_edge_mins * 2)
-        if start_idx < 0: start_idx = 0
-        if end_idx >= len(y): end_idx = len(y) - 1
-        select_idx = np.arange(start_idx, end_idx + 1)
-        logger.debug("Data before selection: {}, {}".format(x.shape, y.shape))
-        x = x[select_idx]
-        y = y[select_idx]
-        logger.debug("Data after selection: {}, {}".format(x.shape, y.shape))
+            # Select on sleep periods
+            w_edge_mins = 30
+            nw_idx = np.where(y != stage_dict["W"])[0]
+            start_idx = nw_idx[0] - (w_edge_mins * 2)
+            end_idx = nw_idx[-1] + (w_edge_mins * 2)
+            if start_idx < 0: start_idx = 0
+            if end_idx >= len(y): end_idx = len(y) - 1
+            select_idx = np.arange(start_idx, end_idx + 1)
+            logger.debug("Data before selection: {}, {}".format(x.shape, y.shape))
+            x = x[select_idx]
+            y = y[select_idx]
+            logger.debug("Data after selection: {}, {}".format(x.shape, y.shape))
 
         # Save
 
