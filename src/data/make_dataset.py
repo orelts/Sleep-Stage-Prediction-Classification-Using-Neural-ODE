@@ -128,11 +128,11 @@ def prepare_physionet_files(files, output_dir, select_ch):
             df = break_2_bands(df)
         elif args.pre_processing == 2:
             df = channels_fft(df)
-        elif args.preprocessing == 3:
+        elif args.pre_processing == 3:
             epcohs = prepare_epcohs(raw=raw, anno=anno, select_ch=select_ch)
             x, y = eeg_power_band(epochs=epcohs)
 
-        if args.preprocessing != 3:
+        if args.pre_processing != 3:
             logger.debug(df.head())
             df.set_index(np.arange(len(df)))
 
