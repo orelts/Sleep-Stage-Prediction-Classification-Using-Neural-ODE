@@ -274,7 +274,7 @@ def train_physionet(trial: optuna.trial.Trial = None):
                                                                  directory_path=args.data_dir,
                                                                  num_of_subjects=args.nrof_files)
 
-    if args.psd:
+    if args.is_psd:
         input_channels = next(iter(train_loader))[0].shape[2]
     else:
         input_channels = next(iter(train_loader))[0].shape[1]
