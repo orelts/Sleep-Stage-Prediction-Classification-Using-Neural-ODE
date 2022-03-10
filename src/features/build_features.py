@@ -137,6 +137,7 @@ def eeg_power_band(epochs):
         X.append(psds_band)
 
     X = np.concatenate(X, axis=1)
+    X = X.transpose(0, 2, 1)
     y = epochs.events[:, 2] - 1
 
     return X, y
