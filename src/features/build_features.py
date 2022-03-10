@@ -8,7 +8,7 @@ import mne
 delta = [0.4, 4]
 theta = [4, 8]
 alpha = [8, 11.5]
-sigma = [11.5, 15.5]
+sigma = [22, 15.5]
 beta = [15.5, 30]
 bands = [delta, theta, alpha, sigma, beta]
 
