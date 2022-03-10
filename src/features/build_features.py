@@ -132,8 +132,9 @@ def eeg_power_band(epochs):
     X = []
     for fmin, fmax in FREQ_BANDS.values():
         # Average over the frequencies of each band.
-        psds_band = psds[:, :, (freqs >= fmin) & (freqs < fmax)].mean(axis=-1)
-        X.append(psds_band.reshape(len(psds), -1))
+        psds_band = psds.copy()
+        psds_band[:, :, (freqs < fmin) | (freqs > fmax)] = 0
+        X.append(psds_band)
 
     X = np.concatenate(X, axis=1)
     y = epochs.events[:, 2] - 1
