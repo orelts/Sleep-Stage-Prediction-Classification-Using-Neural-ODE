@@ -26,7 +26,7 @@ parser.add_argument('--select_ch', nargs='*', default=['EEG Fpz-Cz', 'EEG Pz-Oz'
 parser.add_argument('--output_filepath', type=str, default=r'../../data/processed/')
 parser.add_argument('--output_test_filepath', type=str, default=None)
 parser.add_argument('--split_ratio', type=float, default=0.2)
-parser.add_argument('--subjects_to_folders', default=True, choices=[True, False])
+parser.add_argument('--subjects_to_folders',type=int, default=1, choices=[0, 1])
 parser.add_argument('--verbose', type=int, default=logging.INFO)
 
 args = parser.parse_args()

@@ -275,6 +275,15 @@ def train_physionet(trial: optuna.trial.Trial = None):
                                                                  directory_path=args.data_dir,
                                                                  directory_path_test=args.data_dir_test,
                                                                  num_of_subjects=args.nrof_files)
+    with open('Test_Subjects.csv', 'a', newline='') as f_object:
+        # Pass the CSV  file object to the writer() function
+        writer_object = writer(f_object)
+        for name in files_names:
+            # Result - a writer object
+            # Pass the data in the list as an argument into the writerow() function
+            writer_object.writerow([name])
+            # Close the file object
+        f_object.close()
 
     if args.is_psd:
         input_channels = next(iter(train_loader))[0].shape[2]
