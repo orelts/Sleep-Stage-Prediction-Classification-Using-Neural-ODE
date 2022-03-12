@@ -280,21 +280,23 @@ def main():
 
     logger.info(f'Fetching  subjects {subjects} from physionet dataset ')
 
-    files = fetch_data(subjects=subjects, recording=[1])
     logger.info(f'OUTPUT_DIR:{args.output_filepath}')
 
     # Divide to files to train and test
     if args.output_test_filepath is not None:
-        nof_train = int((1 - args.split_ratio) * len(files))
+        nof_train = int((1 - args.split_ratio) * len(subjects))
 
-        files_train = random.sample(files, k=nof_train)
-        files_test = list(set(files) - set(files_train))
+        subjects_train = random.sample(subjects, k=nof_train)
+        subjects_test = list(set(subjects) - set(subjects_train))
 
+        files_train = fetch_data(subjects=subjects_train, recording=[1])
+        files_test = fetch_data(subjects=subjects_test, recording=[1])
         prepare_physionet(files_train=files_train, files_test=files_test, output_train_dir=args.output_filepath,
                           output_test_dir=args.output_test_filepath, select_ch=args.select_ch)
 
     # Create files without test and train distinction
     else:
+        files = fetch_data(subjects=subjects, recording=[1])
         prepare_physionet_files(files=files, output_dir=args.output_filepath, select_ch=args.select_ch)
 
 
