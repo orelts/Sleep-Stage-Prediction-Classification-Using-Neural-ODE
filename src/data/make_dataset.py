@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 # from dotenv import find_dotenv, load_dotenv
-
+import random
 from mne.datasets.sleep_physionet.age import fetch_data
 import mne
 import numpy as np
@@ -24,6 +24,8 @@ parser.add_argument('--pre_processing', type=int, default=0, choices=[0, 1, 2, 3
 parser.add_argument('--nrof_subjects', type=int, default=15)
 parser.add_argument('--select_ch', nargs='*', default=['EEG Fpz-Cz', 'EEG Pz-Oz'])
 parser.add_argument('--output_filepath', type=str, default=r'../../data/processed/')
+parser.add_argument('--output_test_filepath', type=str, default=None)
+parser.add_argument('--split_ratio', type=float, default=0.2)
 parser.add_argument('--subjects_to_folders', default=True, choices=[True, False])
 parser.add_argument('--verbose', type=int, default=logging.INFO)
 
@@ -255,7 +257,7 @@ def prepare_physionet(files_train, files_test, output_train_dir, output_test_dir
     prepare_physionet_files(files=files_test, output_dir=output_test_dir, select_ch=select_ch)
 
 
-def main(output_filepath):
+def main():
     """ Runs data processing scripts to turn raw data from (../raw) into
         cleaned data ready to be analyzed (saved in ../processed).
     """
@@ -279,9 +281,21 @@ def main(output_filepath):
     logger.info(f'Fetching  subjects {subjects} from physionet dataset ')
 
     files = fetch_data(subjects=subjects, recording=[1])
-    logger.info(f'OUTPUT_DIR:{output_filepath}')
+    logger.info(f'OUTPUT_DIR:{args.output_filepath}')
 
-    prepare_physionet_files(files=files, output_dir=output_filepath, select_ch=args.select_ch)
+    # Divide to files to train and test
+    if args.output_test_filepath is not None:
+        nof_test = int(args.split_ratio * len(files))
+        nof_train = int((1 - args.split_ratio) * len(files))
+
+        files_train = random.sample(files, k=nof_train)
+        files_test = random.sample(files, k=nof_test)
+        prepare_physionet(files_train=files_train, files_test=files_test, output_train_dir=args.output_filepath,
+                          output_test_dir=args.output_test_filepath, select_ch=args.select_ch)
+
+    # Create files without test and train distinction
+    else:
+        prepare_physionet_files(files=files, output_dir=args.output_filepath, select_ch=args.select_ch)
 
 
 if __name__ == '__main__':
@@ -291,4 +305,4 @@ if __name__ == '__main__':
     # load up the .env entries as environment variables
     # load_dotenv(find_dotenv())
 
-    main(args.output_filepath)
+    main()
