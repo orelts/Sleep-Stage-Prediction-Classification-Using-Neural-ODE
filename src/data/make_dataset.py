@@ -285,11 +285,11 @@ def main():
 
     # Divide to files to train and test
     if args.output_test_filepath is not None:
-        nof_test = int(args.split_ratio * len(files))
         nof_train = int((1 - args.split_ratio) * len(files))
 
         files_train = random.sample(files, k=nof_train)
-        files_test = random.sample(files, k=nof_test)
+        files_test = list(set(files) - set(files_train))
+
         prepare_physionet(files_train=files_train, files_test=files_test, output_train_dir=args.output_filepath,
                           output_test_dir=args.output_test_filepath, select_ch=args.select_ch)
 
