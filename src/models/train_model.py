@@ -25,7 +25,7 @@ parser.add_argument('--nepochs', type=int, default=80)
 parser.add_argument('--seed', type=int, default=15)
 parser.add_argument('--data_aug', type=eval, default=True, choices=[True, False])
 parser.add_argument('--tol', type=float, default=1e-3)
-parser.add_argument('--lr', type=float, default=0.009449285433637801)
+parser.add_argument('--lr', type=float, default=0.0020368929277293003)
 parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--adjoint', type=eval, default=False, choices=[True, False])
 parser.add_argument('--subject_count', type=int, default=None,
