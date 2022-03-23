@@ -3,9 +3,10 @@ from torch.utils.data import Dataset
 from torch.utils.data.sampler import SubsetRandomSampler
 import numpy as np
 import glob
+import random
 
 
-def get_data_loaders(batch_size_train, batch_size_test, directory_path, directory_path_test=None, num_of_subjects=1):
+def get_data_loaders(batch_size_train, batch_size_test, directory_path, directory_path_test=None, ratio=None, num_of_subjects=1):
     print(directory_path)
     np_dataset = []
     for idx, np_name in enumerate(glob.glob(directory_path + '/*.np[yz]')):
@@ -24,6 +25,14 @@ def get_data_loaders(batch_size_train, batch_size_test, directory_path, director
                 break
             print(f"loading {np_name}")
             np_dataset_test.append(np_name)
+
+    elif ratio is not None:
+        nof_train = int((1 - ratio) * len(np_dataset))
+
+        np_dataset_train = random.sample(np_dataset, k=nof_train)
+        np_dataset_test = list(set(np_dataset) - set(np_dataset_train))
+
+        np_dataset = np_dataset_train
 
     train_loader, test_loader = data_generator_np(subject_files=np_dataset,
                                                   subject_files_test=np_dataset_test,

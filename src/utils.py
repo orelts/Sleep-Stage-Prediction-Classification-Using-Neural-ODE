@@ -30,14 +30,16 @@ def makedirs(dirname):
         os.makedirs(dirname)
 
 
-def get_logger(log_path, logfilenames, displaying=True, saving=True, level="INFO"):
+def get_logger(log_path, logfilenames, log_name=None, displaying=True, saving=True, level="INFO"):
     log_dir = os.path.dirname(log_path)
     makedirs(log_dir)
     log_file = os.path.basename(log_path)
     if log_file == "":
-        log_file = "_".join(logfilenames)
-        log_file = os.path.basename(log_file)
-        log_file = log_file.split(".", 1)[0]
+        if log_name is None:
+            lst = [os.path.basename(file).split(".", 1)[0] for file in logfilenames]
+            log_file = "_".join(lst)
+        else:
+            log_file = log_name
     logpath = os.path.join(log_dir, log_file)
     logger = logging.getLogger()
 

@@ -15,7 +15,8 @@ parser.add_argument('--data_dir_test', type=str, default=None)
 parser.add_argument('--nrof_files', type=int, default=1)
 parser.add_argument('--shuffle_epochs', type=eval, default=True, choices=[True, False])
 parser.add_argument('--is_psd', type=eval, default=False, choices=[True, False])
-
+parser.add_argument('--ratio', type=float, default=None, help="test portion from files if directories for test and "
+                                                             "train arren't supplied")
 # Network
 parser.add_argument('--network', type=str, choices=['resnet', 'odenet'], default='odenet')
 parser.add_argument('--downsampling-method', type=str, default='conv', choices=['conv', 'res'])
@@ -26,11 +27,13 @@ parser.add_argument('--seed', type=int, default=15)
 parser.add_argument('--data_aug', type=eval, default=True, choices=[True, False])
 parser.add_argument('--tol', type=float, default=1e-3)
 parser.add_argument('--lr', type=float, default=0.0020368929277293003)
+
 parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--adjoint', type=eval, default=False, choices=[True, False])
 parser.add_argument('--subject_count', type=int, default=None,
                     help="Limit the number of subjects we load from data folder")
 # Loggers
+parser.add_argument('--log_name', type=str, default=None)
 parser.add_argument('--save', type=str, default='./logs/')
 parser.add_argument('--log_level', type=str, default="DEBUG", choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"])
 
@@ -221,7 +224,8 @@ def train(model, train_loader, test_loader, cfg, feature_layers):
 
     # Adding to CSV file the last train and test results
     name = os.path.basename(path_to_save_log)
-    with open('Results.csv', 'a', newline='') as f_object:
+    path_for_excel = os.path.join(log_dir, 'Results.csv')
+    with open(path_for_excel, 'a', newline='') as f_object:
         # Pass the CSV  file object to the writer() function
         writer_object = writer(f_object)
         # Result - a writer object
@@ -274,8 +278,11 @@ def train_physionet(trial: optuna.trial.Trial = None):
                                                                  batch_size_test=cfg['test_batch_size'],
                                                                  directory_path=args.data_dir,
                                                                  directory_path_test=args.data_dir_test,
+                                                                 ratio=args.ratio,
                                                                  num_of_subjects=args.nrof_files)
-    with open('Test_Subjects.csv', 'a', newline='') as f_object:
+
+    test_subjects_dir = os.path.join(args.save, 'Test_Subjects.csv')
+    with open(test_subjects_dir, 'a', newline='') as f_object:
         # Pass the CSV  file object to the writer() function
         writer_object = writer(f_object)
         for name in files_names:
@@ -293,7 +300,8 @@ def train_physionet(trial: optuna.trial.Trial = None):
     global logger
     global path_to_save_log
     global log_dir
-    logger, path_to_save_log, log_dir = utils.get_logger(log_path=args.save, logfilenames=files_names, level=args.log_level)
+
+    logger, path_to_save_log, log_dir = utils.get_logger(log_path=args.save, log_name=args.log_name, logfilenames=files_names, level=args.log_level)
 
     logger.info(f"Script Path: {os.path.abspath(__file__)}\n")
     if args.optuna:
@@ -333,6 +341,7 @@ if __name__ == '__main__':
     device = torch.device('cuda:' + str(args.gpu) if torch.cuda.is_available() else 'cpu')
     global logger
     global path_to_save_log
+
 
     # Using optuna to optimize hyper parameters
     if args.optuna:
