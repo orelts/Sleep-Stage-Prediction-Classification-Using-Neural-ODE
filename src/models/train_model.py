@@ -342,6 +342,7 @@ if __name__ == '__main__':
     global logger
     global path_to_save_log
 
+    utils.makedirs(args.save)
 
     # Using optuna to optimize hyper parameters
     if args.optuna:

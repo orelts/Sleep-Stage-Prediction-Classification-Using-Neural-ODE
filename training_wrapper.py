@@ -7,7 +7,7 @@ DATA_DIR = r'data/prcoessed(75_subjects-train-test)/train'
 TEST_RATIO = '0.2'
 EPOCHS = '80'
 
-for i in [4, 5]:
+for i in [4, 5, 6, 7]:
 
     subprocess.call([sys.executable, '-m',  'src.models.train_model',
                      '--data_dir', DATA_DIR,
